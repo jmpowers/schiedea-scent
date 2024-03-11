@@ -979,4 +979,25 @@ Year	Page	Sample	Flow	Mass	Vial	Filename	Path	Species	Population	Plant	Cutting	P
 2022		978			714	SCH_AIR_N_2022_862022_14.qgd		ambient						N																	2022-01-01	17:00	17:30	18:00	0.50	0.50	1.00		RMBL		NR		
 2022		979			715	SCH_HAW1_D_2022_862022_15.qgd		hawaiiensis		1				D	H	0	1	-	-			1									2022-01-01	12:00	12:30	13:00	0.50	0.50	1.00		RMBL		NR		
 2022		980			716	SCH_HAW2_D_2022_862022_16.qgd		hawaiiensis		2				D	H	0	1	-	-			1									2022-01-01	12:00	12:30	13:00	0.50	0.50	1.00		RMBL		NR		
-2022		981			717	SCH_AIR_D_2022_862022_17.qgd		ambient						D																	2022-01-01	12:00	12:30	13:00	0.50	0.50	1.00		RMBL		NR		
+2022		981			717	SCH_AIR_D_2022_862022_17.qgd		ambient						D	H																2022-01-01	12:00	12:30	13:00	0.50	0.50	1.00		RMBL		NR		
+2023		982			801	SCH_SW_1_8222023_06.qgd		diffusa	180312	180312 001 #01 Kohala Mts., Hawai`i Island	#8		A	D	H			1		6	8									24.4	2023-05-04	13:37	14:07	14:37	0.50	0.50	1.00		RMBL		NR		https://docs.google.com/spreadsheets/d/1hz-Ff7Ii2a_kY0ArEgv6nJDz-udnp4EQ/edit#gid=1404656144
+2023		983			802	SCH_SW_2_8222023_07.qgd		ambient						D																24.4	2023-05-04		14:23	14:53		0.50	0.50		RMBL		NR		Mphase = open flowers, Closed = # old/past flowers
+2023		984			803	SCH_SW_3_8222023_08.qgd		diffusa	180312	180312 001 #01 Kohala Mts., Hawai`i Island	#8		A	N	H			1		6	8									18.3	2023-05-04	19:59	20:31	21:01	0.53	0.50	1.03		RMBL		NR		less than 1/2 hour, bag fell off
+2023		985			804	SCH_SW_4_8222023_09.qgd		ambient						N																18.3	2023-05-04		20:57	21:27		0.50	0.50		RMBL		NR		
+2023		986			805	SCH_SW_5redo_8222023_10.qgd		diffusa	180312	180312 001 #01 Kohala Mts., Hawai`i Island	#8			N	H															18.3	2023-05-04	20:31	21:04	21:34	0.55	0.50	1.05		RMBL		NR		re-do, not the best sample because of limited number of flowers
+2023		987			806	SCH_SW_6_8232023_02.qgd		diffusa	180312	180312 001 #01 Kohala Mts., Hawai`i Island	#8		B	D	H			2		12	22										2023-05-13	13:08	13:39	14:09	0.52	0.50	1.02		RMBL		NR		
+2023		988			807	SCH_SW_7_8232023_03.qgd		ambient						D																	2023-05-13		14:03	14:33		0.50	0.50		RMBL		NR		
+2023		989			808	SCH_SW_8_8232023_04.qgd		diffusa	180312	180312 001 #01 Kohala Mts., Hawai`i Island	#8		B	N	H			2		12	22										2023-05-13	20:03	20:35	21:05	0.53	0.50	1.03		RMBL		NR		
+2023		990			809	SCH_SW_9redo_8232023_10.qgd		ambient						N																	2023-05-13		20:53	21:23		0.50	0.50		RMBL		NR		
+2023		991			810	SCH_SW_10_230504_8292023_02.qgd		pentandra	PAL-A	PAL-A-001	#4		A	D	H	2		5		6	19										2023-05-19	13:09	13:39	14:09	0.50	0.50	1.00		RMBL		NR		
+2023		992			811	SCH_SW_11_230504_8292023_03.qgd		ambient						D																	2023-05-19		13:59	14:29		0.50	0.50		RMBL		NR		
+2023		993			812	SCH_SW_12_230504_8292023_04.qgd		pentandra	PAL-A	PAL-A-001	#4		A	N	H	2		5		6	19										2023-05-19	19:45	20:25	20:55	0.67	0.50	1.17		RMBL		NR		
+2023		994			813	SCH_SW_13_230504_8292023_05.qgd		ambient						N																	2023-05-19		20:51	21:21		0.50	0.50		RMBL		NR		
+2023		995			814	SCH_SW_14_230504_8292023_06.qgd		diffusa	180312	180312 001 #01 Kohala Mts., Hawai`i Island	#5		A	D	H			14		6	28										2023-06-03	13:08	13:45	14:15	0.62	0.50	1.12		RMBL		NR		
+2023		996			815	SCH_SW_15_230504_8292023_07.qgd		ambient						D																	2023-06-03		14:18	14:48		0.50	0.50		RMBL		NR		
+2023		997			816	SCH_SW_16_230504_8292023_08.qgd		diffusa	180312	180312 001 #01 Kohala Mts., Hawai`i Island	#5		A	N	H			14		6	28										2023-06-03	19:54	20:27	20:57	0.55	0.50	1.05		RMBL		NR		
+2023		998			817	SCH_SW_17_230504_8292023_09.qgd		ambient						N																	2023-06-03		20:59	21:29		0.50	0.50		RMBL		NR		
+2023		999			818	SCH_SW_18_230504_8292023_10.qgd		waiahulu	WV	Waiahulu Valley, Kaua`i			A	D	H			5		1	17										2023-06-08	12:50	13:21	13:51	0.52	0.50	1.02		RMBL		NR		
+2023		1000			819	SCH_SW_19_230504_8292023_11.qgd		ambient						D																	2023-06-08		13:23	13:53		0.50	0.50		RMBL		NR		
+2023		1001			820	SCH_SW_20_230504_8292023_12.qgd		waiahulu	WV	Waiahulu Valley, Kaua`i			A	N	H			5		1	17										2023-06-08	20:00	20:32	21:02	0.53	0.50	1.03		RMBL		NR		
+2023		1002			821	SCH_SW_21_230504_8292023_13.qgd		ambient						N																	2023-06-08		21:06	21:36		0.50	0.50		RMBL		NR		

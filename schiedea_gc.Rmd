@@ -58,9 +58,18 @@ isblank <- grepl("Blank|Bakeout", rownames(sch.cut))#if original FileName says b
 table(km$cluster, isblank)
 kblank <- km$cluster == which.max(table(km$cluster, isblank)[,2])
 
-#load("../Inventory/markes_sequence.rda") #from markes_sequence.R
-#save(sequ.summary, file="data/sequ_summary.rda")
-load("data/sequ_summary.rda")
+load("data/markes_sequence230908_2023.rda") #2023 only
+sequ.summary.23 <- sequ.file %>% 
+  select(c(sequence.start, Desorb.Start.Time, CreationTime, eithertime, status, Tube, markes_n,
+           GC_n, either_n, markes_GC, create_desorb,  FileName, user, FullName, id, fuzzy_n)) %>% #columns needed for annotating verdicts
+  arrange(sequence.start, markes_n, eithertime) %>%
+  mutate(desorb.Start.diff = c(NA, diff(Desorb.Start.Time)))
+
+# load("../Inventory/markes_sequence.rda") #through 2022, from markes_sequence.R
+# save(sequ.summary, file="data/sequ_summary221006.rda")
+load("data/sequ_summary221006.rda") #2022 and earlier
+sequ.summary <- bind_rows(sequ.summary, sequ.summary.23)
+
 Powers <- grepl("Powers RMBL Data", sequ.summary$FullName, fixed=T) | grepl("SCH_", sequ.summary$FileName, fixed=T)
 schiedea.ids <- sequ.summary %>% filter(Powers) %>% select(id) %>% unique %>% na.omit
 schgc <- sequ.summary %>% filter(id %in% schiedea.ids$id | Powers)
@@ -75,7 +84,7 @@ rownames(schgc) <- 1:nrow(schgc)
 notebook <- read.delim("data/leak_notebook.csv")
 schgc <- cbind(schgc, notebook[match(schgc$vial, as.integer(as.character(notebook$Vial)), incomparables=NA),-4])
 schgc$TubeMatch <- schgc$Tube == schgc$SteelTube
-write.csv(schgc, "data/schiedea_all220806.csv")
+write.csv(schgc, "data/schiedea_all230908.csv")
 
 with(sch.km, table(kBlank, nameBlank))
 ```
@@ -105,6 +114,9 @@ s <- read_tsv(sampl, col_types = cols(.default = col_character(),
 ))
 s.nr <- s[s$GC=="NR",]
 s.nr$Vial <- as.integer(s.nr$Vial)
+s.nr$DN <- factor(ifelse(s.nr$Start > 16*60*60, "Night", "Day"))
+
+
 sort(union(s.nr$Vial, schgc$vial2))
 sort(setdiff(s.nr$Vial, schgc$vial2)) #not run yet
 sort(setdiff(schgc$vial2, s.nr$Vial)) #run but not entered  
@@ -112,8 +124,6 @@ broken <- c(52,53,56,86,117,124,125,129,174) #broken traps - not run
 empty <- c(7,16,18,28,40,313,314,315,316) # presumed clean - run
 notrun <- c(5,8,21,30,33,50,51,55,57,64,66,74,75,80,81,82,83,84,88,89,91,95,100,102,103,104,107,108,109,11,12,22,23,24,25,26,58,59,60,61,62,63,58,92,94,96,97,98,9, 90, 79, 87, 72, 99)
 setdiff(setdiff(setdiff(s.nr$Vial, schgc$vial2), broken), notrun)
-s.nr$DN <- factor(ifelse(s.nr$Start > 16*60*60, "Night", "Day"))
-#s.nr$FileName <- schgc$FileName2[match(s.nr$Vial, schgc$vial2)]
 
 #read back the verdicts
 #library(googlesheets4)
@@ -124,10 +134,11 @@ schgc.verdict19 <- read_tsv("data/Schiedea RMBL GC-MS Inventory - schiedea_all.t
          create_desorb = duration(create_desorb),
          ApproxDate = as.character(ApproxDate)) %>% 
   filter(index <= 841) #knock off a couple blanks that don't align
-schgc.verdict2122 <- schgc[106:142,] %>% #842:891
+schgc.verdict2122 <- schgc[c(106:142,910:991),] %>% #842:891
   left_join(s.nr %>% select(vial3=Vial,FileName=Filename) %>%  filter(vial3 >=700))  #TODO hack to paste in the new samples
 schgc.verdict <- bind_rows(schgc.verdict19, schgc.verdict2122)
-#TODO add 2023 (31 or 33 rows)
+
+#TODO get verdicts and schgc to match
 #sum(schgc.verdict$FileName != schgc$FileName, na.rm=T)
 schgc$verdict <- schgc.verdict$verdict
 schgc$FileName2 <- ifelse(is.na(schgc.verdict$sample), schgc$FileName, schgc.verdict$sample)
