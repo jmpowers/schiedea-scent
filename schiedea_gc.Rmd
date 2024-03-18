@@ -36,12 +36,14 @@ source("read_shimadzu.R")
 # sch.data2 <- read.shimadzu("../Schiedea/Schiedea_190814.txt")
 # sch.data <- bind_rows(sch.data, sch.data2)
 # save(sch.data, file="data/schiedea_190801_190814.Rdata")
-# sch.data.212223 <- "../RMBL Batches/" %>% paste0(list.files(., pattern="txt")) %>%
-#   set_names() %>% map_dfr(read.shimadzu, .id="batch") %>% mutate(batch = str_remove(batch, "../RMBL Batches/"))
+# batches.212223 <- c("PG_VF_210826.txt", "PG_Ihyb_220806_1.txt", "Ihyb_SCH_230822b.txt",
+#                     "Ihyb_SCH_230823a.txt", "Ihyb_SCH_230823b.txt", "PFOL_SCH_230822a.txt","SCH_230829a.txt")
+# sch.data.212223 <- "../RMBL Batches/" %>% paste0(batches.212223) %>% set_names(batches.212223) %>%
+#   map_dfr(read.shimadzu, .id="batch") 
 # save(sch.data.212223, file="data/schiedea_212223.Rdata")
-load("data/schiedea_190801_190814.Rdata")
 load("data/schiedea_212223.Rdata")
 sch.data.212223 %>% count(batch, Filename) %>% filter(str_detect(Filename, "SCH"))
+load("data/schiedea_190801_190814.Rdata")
 sch.data <- bind_rows(sch.data, sch.data.212223)
 
 sch.all <- dcast(sch.data, Filename~Name, sum, value.var="Area")
@@ -134,13 +136,22 @@ schgc.verdict19 <- read_tsv("data/Schiedea RMBL GC-MS Inventory - schiedea_all.t
          create_desorb = duration(create_desorb),
          ApproxDate = as.character(ApproxDate)) %>% 
   filter(index <= 841) #knock off a couple blanks that don't align
-schgc.verdict2122 <- schgc[c(106:142,910:991),] %>% #842:891
-  left_join(s.nr %>% select(vial3=Vial,FileName=Filename) %>%  filter(vial3 >=700))  #TODO hack to paste in the new samples
-schgc.verdict <- bind_rows(schgc.verdict19, schgc.verdict2122)
+
+which(year(schgc$eithertime) > 2020)
+schgc.verdict212223 <- schgc[c(106:142,910:991),] %>% #119 recent rows, was 842:891
+  left_join(s.nr %>% select(vial3=Vial,FileName=Filename) %>%  filter(vial3 >=700))  #TODO hack to paste in vial numbers of the new samples
+schgc.verdict <- bind_rows(schgc.verdict19, schgc.verdict212223)
 
 #TODO get verdicts and schgc to match
-#sum(schgc.verdict$FileName != schgc$FileName, na.rm=T)
-schgc$verdict <- schgc.verdict$verdict
+sum(schgc.verdict$FileName != schgc$FileName, na.rm=T)
+nrow(schgc.verdict)
+nrow(schgc) #longer by 31
+setdiff(schgc.verdict$FileName, schgc$FileName) #29 in verdicts, not schgc (all from 2019)
+setdiff(schgc$FileName, schgc.verdict$FileName) #2 blanks in schgc, not verdicts (knocked off above)
+plot(match(schgc$FileName, schgc.verdict$FileName))
+plot(match(schgc.verdict$FileName, schgc$FileName))
+
+schgc$verdict <- schgc.verdict$verdict #assumes the verdicts are in the same row order
 schgc$FileName2 <- ifelse(is.na(schgc.verdict$sample), schgc$FileName, schgc.verdict$sample)
 schgc$vial2 <- as.integer(str_match(schgc$FileName2, "_V(\\d{1,3})")[,2])
 schgc$vial2 <- coalesce(schgc$vial2, schgc.verdict$vial3)#TODO hack for new samples
