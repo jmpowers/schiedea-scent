@@ -1,0 +1,1852 @@
+---
+title: "Schiedea Hybrid Scent"
+author: "[John Powers](http://sites.uci.edu/powers/)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    toc: yes
+    toc_float: TRUE
+  pdf_document:
+    toc: yes
+resource_files: 
+- .httr-oauth
+- inventory.Rdata
+---
+<style type="text/css">
+.main-container { max-width: 1600px; margin-left: 0; margin-right: auto; }
+img{ max-width:200%; height: auto; }
+td, th { padding : 6px }
+</style>
+
+```{r setup, include=FALSE}
+#params <- {}; params$cutoff <- 0 #20000
+setwd("~/MyDocs/MEGA/UCI/Schiedea/Analysis/scent")
+#source("sdata2.R", local=T)
+library(RColorBrewer)
+library(knitr)
+library(plyr); library(dplyr)
+library(reshape2)
+library(vegan)
+library(ggplot2)
+#load("./rdata/sdata3.Rdata")
+load("./rdata/sdata3_hexoct.Rdata")
+knitr::opts_chunk$set(comment="  ", cache=T)
+#knit_hooks$set(webgl = hook_webgl) #setupKnitr() #old way with webgl=TRUE in each chunk
+colMax <- function(data) sapply(data, max, na.rm = TRUE)
+colMin <- function(data) sapply(data, min, na.rm = TRUE)
+rowMax <- function(data) apply(base::as.matrix(data), 1, max)
+divmax <- function(x) { sweep(x, 2, apply(x, 2, max)+0.000000001, "/") }
+range01 <- function(x){(x-min(x))/(max(x)-min(x))}
+time2frac <- function(x) { (hour(x)+minute(x)/60+second(x)/3600) /24 }
+time2dec <- function(x) { (hour(x)+minute(x)/60+second(x)/3600) }
+scientific_10 <- function(x) {
+parse(text=ifelse(x==0, "0", gsub(fixed=T, "e+", " %*% 10^", scales::scientific_format(digits=1,nsmall=1)(x+1e-15)))) 
+}
+```
+
+S. kaalae, S. hookeri, and hybrids
+
+#Sample Inventory
+By plant population (pure species) or type of cross:
+```{r sv}
+eve <- -2.5 #hours before sunset
+
+specs <- kaho <- c("HOOK", "KAAL","KAHO")
+#191216 turned off excluding resamples - now averaging them with code
+#TODO: some red flags in the Notes column - possible wrong IDs
+#resamples <- c("282","070","069","238","079","080","144","181","176","175") # see svdup_diel.ods, selected to maximize remaining variation in sunset time. does not filter out KAHO duplicates yet.
+#updated with resamples excluded: cappar2 anova table, 
+f <- spec %in% specs #& !(sv$Sample %in% resamples)
+speca <- replace(spec, sv$Population == "KK", "KAAL"); speca <- replace(speca, sv$Population == "HH", "HOOK")
+specp <- factor(speca[f], levels=c("HOOK","KAHO","KAAL"))#REORDER
+specscol <- c("green","black","red")
+
+#"3587WP" "879WKG" "881KHV" "892WKG" "904WPG" "HH"     "HK"     "KH"     "KK"     "WK"  
+hybpopsp <- c("K", "H", "K", "K", "K", "HH", "HK", "KH", "KK", "H")
+hybcol <- c("red","green","red","red","red","darkgreen","blue","orange","magenta", "green")
+
+kahomp <- data.frame(Plant=as.character(sv[sv$Species == "kaho","Plant"]), stringsAsFactors = F)
+kahomp <- colsplit(string=kahomp$Plant, pattern=" x ", names=c("Maternal", "Paternal"))
+kahopops <- c("879WKG", "WK","3587WP","892WKG","904WPG")
+kahomp <- as.data.frame(apply(kahomp, c(1,2), function(x) strsplit(x, "-")[[1]][1]))
+kahomp <- lapply(kahomp, mapvalues, from = c("794","866","891","899","879","892","904","3587"), to = c("WK","WK","WK","WK","879WKG","892WKG","904WPG","3587WP"))
+kahomp <- lapply(kahomp, factor, levels=kahopops)
+sv$Population2 <- sv$Population
+sv[sv$Species == "kaho",]$Population2 <- ifelse(kahomp$Maternal==kahomp$Paternal, as.character(kahomp$Maternal), "Interpop")
+sv$Population2 <- factor(sv$Population2)
+sv$ftot <- rowSums(vol)/sv$Flrs
+sv$SpeciesR <- ifelse(speca=="KAHO",as.character(sv$Population),as.character(speca)) 
+sv$SpeciesR <- factor(sv$SpeciesR, levels=c("KAAL","KH","HK","HOOK"))
+levels(sv$SpeciesR) <- c("S. kaalae", "K x H", "H x K", "S. hookeri")
+hybcolr <- setNames(c(brewer.pal(3,"Greens")[3],brewer.pal(9,"Oranges")[5], brewer.pal(9,"Set1")[7], brewer.pal(3,"Purples")[3]),levels(sv$SpeciesR))
+sv$Individual <- with(sv, factor(paste(Species, Population, Plant, Cutting)))
+
+volhyb <- vol[f,]
+volhyb <- volhyb[order(as.integer(specp)),]
+specp <- sort(specp)
+svhyb <- sv[rownames(volhyb),]
+volhyb <- volhyb[order(as.integer(specp), svhyb$Population),]
+volhyb <- volhyb[,colSums(volhyb)>0]
+pavolhyb <- volhyb
+pavolhyb[pavolhyb>0] <-1
+svolhyb <- decostand(volhyb, "total")
+
+#new consolidated svhyb and svhybn code
+svhyb <- sv[rownames(volhyb),]
+fvolhyb <- volhyb / svhyb$Flrs
+svhyb$Population <- as.factor(svhyb$Population)
+#svhyb$DN <- factor(ifelse(svhyb$Start > 59400, "Night", "Day"))
+#svhyb$DN <- factor(ifelse(svhyb$Stop > 55000, "Night", "Day"))
+svhyb$DN <- factor(ifelse(svhyb$StartSunset > eve, "Night", "Day"))
+svhyb$Inflo[is.na(svhyb$Inflo)]<-1:sum(is.na(svhyb$Inflo))
+svhyb$Diurnal[is.na(svhyb$Diurnal)]<-1:sum(is.na(svhyb$Diurnal))
+svhyb$plants  <- hybplants  <- paste(svhyb$Population, svhyb$Plant, sep="-")
+svhyb$plantsi <- hybplantsi <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, sep="-")
+svhyb$parents <- hybplants
+svhyb$parents[grepl(" x ", hybplants, fixed=T)]<-1:sum(grepl(" x ", hybplants, fixed=T))#only group by parents, set the crosses to an integer sequence to force them not to group
+hybparents <- svhyb$parents
+svhyb$Inflo[is.na(svhyb$Inflo)]<-1:sum(is.na(svhyb$Inflo))
+svhyb$Diurnal[is.na(svhyb$Diurnal)]<-1:sum(is.na(svhyb$Diurnal))
+svhyb$plantsdn <- hybplantsdn <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Diurnal, sep="-")
+svhyb$plantsinflo <- hybplantsinflo <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Inflo, sep="-")
+svhyb$plantsinflodate <- hybplantsinflodate <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Inflo, svhyb$SampleDate, sep="-")
+
+volhybn <- volhyb[svhyb$DN == "Night",]
+specpn <- specp[svhyb$DN == "Night"]
+svolhybn <- decostand(volhybn, "total")
+
+svhybn <- svhyb[svhyb$DN == "Night",]
+fvolhybn <- volhybn / svhybn$Flrs
+specpd <- svhybn$SpeciesR
+#svhybn <- sv[rownames(volhybn),]
+#svhybn$Population <- as.factor(svhybn$Population)
+#svhybn$DN <- factor(ifelse(svhybn$StartSunset > eve, "Night", "Day"))
+hybplantsn <- svhybn$plants #paste(svhybn$Population, svhybn$Plant, sep="-")
+hybplantsin <- svhybn$plantsi #paste(svhybn$Population, svhybn$Plant, svhybn$Cutting, sep="-")
+hybparentsn <- svhybn$parents #paste(svhybn$Population, svhybn$Plant, sep="-")
+#hybparentsn[nchar(hybparentsn)>9]<-1:sum(nchar(hybparentsn)>9)
+#svhybn$Inflo[is.na(svhybn$Inflo)]<-1:sum(is.na(svhybn$Inflo))
+#svhybn$Diurnal[is.na(svhybn$Diurnal)]<-1:sum(is.na(svhybn$Diurnal))
+hybplantsdnn <- svhybn$plantsdn #paste(svhybn$Population, svhybn$Plant, svhybn$Cutting, svhybn$Diurnal, sep="-")
+hybplantsinflon <- svhybn$plantsinflo #paste(svhybn$Population, svhybn$Plant, svhybn$Cutting, svhybn$Inflo, sep="-")
+hybplantsinflodaten <- svhybn$plantsinflodate #paste(svhybn$Population, svhybn$Plant, svhybn$Cutting, svhybn$Inflo, svhybn$SampleDate, sep="-")
+
+
+
+```
+
+```{r inventory}
+inventory <- data.frame(row.names=levels(svhyb$Population), Cross=hybpopsp, Color=hybcol,Samples=as.vector(table(svhyb$Population)))[order(hybpopsp), ]
+kable(inventory)
+
+summary(as.numeric(as.difftime(format.POSIXct(svhyb$SampleDateStart[svhyb$DN=="Night"], tz="GMT+8", format="%H:%M"),format="%H:%M")))#convert PDT to PST when needed
+
+summary(as.numeric(as.difftime(format.POSIXct(svpar$SampleDateStart[svpar$DN=="Night"], tz="GMT+8", format="%H:%M"),format="%H:%M")))
+
+summary(as.numeric(svhyb$StartSunset[svhyb$DN=="Night"]))
+summary(as.numeric(svhyb$StartNoon[svhyb$DN=="Day"]))
+```
+
+
+Just the evening crosses samples (not plants!):
+```{r crosses}
+kahomp <- as.data.frame(svhyb[svhyb$Species == "kaho" & svhyb$StartSunset > eve,"Plant"])#line differs from above - just evening
+kahomp <- reshape2::colsplit(string=kahomp$Plant, pattern=" x ", names=c("Maternal", "Paternal"))
+kahopops <- c("879WKG", "WK","3587WP","892WKG","904WPG")
+kahomp <- as.data.frame(apply(kahomp, c(1,2), function(x) strsplit(x, "-")[[1]][1]))
+kahomp <- lapply(kahomp, mapvalues, from = c("794","866","891","899","879","892","904","3587"), to = c("WK","WK","WK","WK","879WKG","892WKG","904WPG","3587WP"))
+kahomp <- lapply(kahomp, factor, levels=kahopops)
+tkahomp <- table(kahomp)
+t(lower.tri(tkahomp)*tkahomp)+tkahomp*upper.tri(tkahomp, diag=T)
+mtkahomp <- 6-tkahomp
+mtkahomp <- as.data.frame(mtkahomp)
+
+#crosses and parent samples (not plants) added on diagonal in the evening:
+(inventory.cross <- tkahomp+diag(table(svhyb$Population[svhyb$StartSunset > eve])[rownames(tkahomp)]))
+write.csv(inventory.cross, "inventory_cross_parents.csv")
+#remember to add the 4 881KHV samples (not used to make crosses since from the Ko'olaus)
+#there are also two samples without populations (HH and KH)
+
+#how many maternal and paternal parent plants?
+library(dplyr)
+library(tidyr)
+mp <- sv %>% filter(Species =="kaho") %>% select(Plant) %>% mutate(Plant=as.character(Plant)) %>%
+  separate(Plant, sep=" x ", into = c("Maternal", "Paternal")) %>% 
+  separate(Maternal, sep="-", into = c("MomPop", "MomPlant"), remove=F, extra="merge") %>% 
+  separate(Paternal, sep="-", into = c("DadPop", "DadPlant"), remove=F, extra="merge")
+
+mp %>% group_by(MomPop) %>% summarize(moms=n_distinct(MomPlant))
+mp %>% group_by(DadPop) %>% summarize(moms=n_distinct(DadPlant))
+```
+
+Some plants were used for more than one sample - day/night or on the same inflorescence:
+```{r duplicates}
+kable(cbind(Plants=table(specp[!duplicated(cbind(specp,hybplantsi))]), table(data.frame(specp,Diurnal=svhyb$DN))))
+
+kable(cbind(Plants=table(svhybn$SpeciesR[!duplicated(cbind(svhybn$SpeciesR,hybplantsin))]), table(data.frame(svhybn$SpeciesR,Diurnal=svhybn$DN))))
+
+svhybn  %>% group_by(Individual) %>% filter(n()>1) %>% ungroup() %>% #find duplicates
+  dplyr::select(SampleDate, Individual, ftot, Leaves:Flrs) %>% arrange(Individual, SampleDate)
+svhybn %>% select(Individual, Inflo, SampleDate, Notes) %>% group_by(Individual) %>% filter(n()>1) %>% arrange(Individual, SampleDate) %>% distinct(Individual) %>% nrow  #%>% print(n=Inf)
+
+table(svhyb$Population[!duplicated(cbind(specp,hybplantsi))])
+```
+
+Evening crosses plants (not samples)
+```{r crosses}
+svhybn.plants <- svhybn %>% group_by(Species, SpeciesR, Population, Plant, Cutting, Individual) %>% summarize_at(vars(ftot), mean)
+
+kahomp.plants <- as.data.frame(svhybn.plants[svhybn.plants$Species == "kaho","Plant"])
+kahomp.plants <- colsplit(string=kahomp.plants$Plant, pattern=" x ", names=c("Maternal", "Paternal"))
+kahomp.plants <- as.data.frame(apply(kahomp.plants, c(1,2), function(x) strsplit(x, "-")[[1]][1]))
+kahomp.plants <- lapply(kahomp.plants, mapvalues, from = c("794","866","891","899","879","892","904","3587"), to = c("WK","WK","WK","WK","879WKG","892WKG","904WPG","3587WP"))
+kahomp.plants <- lapply(kahomp.plants, factor, levels=kahopops)
+tkahomp.plants <- table(kahomp.plants)
+
+
+write.csv(tkahomp.plants, "inventory_cross_plants.csv")
+#remember to add the 3 881KHV plants (not used to make crosses since from the Ko'olaus)
+#add to the diagonal these parent plants:
+table(svhybn.plants$Population)[rownames(tkahomp)]
+#there are also two plants from crosses without populations (HH and KH) - added these to 879x879 and 892xWK in the inventory
+```
+
+
+#Flowers per inflorescence
+Biased high due to selecting large fresh inflorescences. Includes open flowers only.
+```{r fperi}
+#species
+flr <- with(sv, data.frame(Flrs,Closed,Buds))
+
+#df <- gather(flr, key=Filename, specpn)
+#colnames(df) <- c("Filename", "specpn")
+#ggplot(svhybn, aes(x=specpn, y=value, fill=var))
+
+flrpca <- prcomp(flr,center=T,scale=T)
+library(ggbiplot)
+ggbiplot(flrpca, obs.scale = 1, var.scale = 1, groups = spec, labels=sv$Sample, ellipse = TRUE)
+
+library(beanplot)
+beanplot(svhybn$Closed/as.numeric(svhybn$Inflor)~specpn, main="Closed flowers per inflorescence")
+
+
+with(svhybn, plot(Fphase~Closed, col=specpn))
+
+#kaho
+flrhyb <- with(svhyb, data.frame(Mphase,Fphase,Closed,Buds))
+flrhybn <- flrhyb[svhyb$DN=="Night",]
+flrhybpca <- prcomp(log(flrhybn/svhybn$Inflor+1),center=T,scale=T)
+ggbiplot(flrhybpca, obs.scale = 1, var.scale = 1, groups = specpn, ellipse = T, alpha=1, varname.size=4) + ggtitle("PCA of log flower counts per inflorescence") + scale_color_manual(values=c(3,1,2))
+#labels=apply(flrhybn,1,paste,collapse=":")
+#labels=round(svhybn$Flrs/svhybn$Inflor)
+#groups=svhybn$Population
+
+library(PerformanceAnalytics)
+chart.Correlation(log(flrhybn/svhybn$Inflor+1), histogram=T, pch=19, col=specpn, lwd=2)
+
+library("GGally")
+ggpairs(flrhybn)
+
+ord <- order(specpn,svhybn$Population,rowSums(flrhybn))
+barplot(t(as.matrix(cbind(svhybn$Mphase,svhybn$Fphase,svhybn$Closed,svhybn$Buds)[ord,])), col=rev(c(3,6,2,4)), border=NA, names.arg=paste(specpn,svhybn$Population)[ord], col.axis="black", cex.names=0.8, axes=T, las=2, ylab="All flower types per inflorescence sampled")
+legend("topleft",legend=rev(c("Male phase","Female phase", "Closed", "Buds")), fill=c(3,6,2,4))
+
+
+flrcomp <- metaMDS(flrhyb, autotransform=F, trace=0)
+ordiplot(flrcomp, type="n")
+points(flrcomp, col=specp)
+
+adonis(decostand(flrhyb, method="total")~specp, permutations=999)
+
+library(ade4)
+par(mfrow=c(2,2))
+for(i in 1:3) {
+  flr.vol <- mantel.rtest(vegdist(volhybn[specpn==specs[i],]), dist(flrhybn[specpn==specs[i],]), nrepet = 999)
+plot(vegdist(volhybn[specpn==specs[i],])~vegdist(flrhybn[specpn==specs[i],]), main=specs[i], 
+     sub=paste("Mantel R=", round(flr.vol$obs,3)," p=",flr.vol$pvalue),
+     xlab="Inflorescence Euclid dist", ylab="Scent Bray dist", 
+     col=alpha(4-i,0.4), xlim=c(0,0.8), ylim=c(0,1))
+}
+
+library(ade4)
+flr.vol <- mantel.rtest(vegdist(volhyb), vegdist(flrhyb), nrepet = 999)
+print(flr.vol)
+plot(flr.vol)
+```
+
+```{r fcompscomp, eval=FALSE}
+plot(svhyb$Flrs~svhyb$Closed, col=specp)
+plot(log(svhyb$Flrs/(svhyb$Closed+1)) ~ specp)
+summary(lm(log(svpar$Flrs/(svpar$Closed+1)) ~ specpar))
+
+infloagen <- log10(flrhybn$Closed/flrhybn$Fphase)
+with(log(flrhybn+1), plot(mdshybn$points[,2]~(Mphase/Fphase/Buds/Closed), col=specp))
+
+fit <- lm(as.matrix(volhybn) ~ as.matrix(flrhybn))
+fit <- lm(as.matrix(mdshybn$points) ~ as.matrix(flrhybn))
+summary(fit)
+
+flrcap <- capscale(svolhybn[specpn=="HOOK",]~., data=log(flrhybn[specpn=="HOOK",]+1))
+flrcap <- vegan::rda(svolhybn[specpn=="KAAL",]~., data=log(flrhybn[specpn=="KAAL",]+1))
+flrcap <- vegan::rda(svolhybn[specpn=="KAHO",]~., data=log(flrhybn[specpn=="KAHO",]+1))
+flrcap
+anova(flrcap)
+
+flrrda <- vegan::rda(svolhybn[specpn=="HOOK",]~., data=log(flrhybn[specpn=="HOOK",]+1))
+flrrda <- vegan::rda(svolhybn[specpn=="KAAL",]~., data=log(flrhybn[specpn=="KAAL",]+1))
+flrrda <- vegan::rda(svolhybn[specpn=="KAHO",]~., data=log(flrhybn[specpn=="KAHO",]+1))
+flrrda
+anova(flrrda)
+
+flrcca <- vegan::cca(fvolhybn[specpn=="HOOK",]~., data=log(flrhybn[specpn=="HOOK",]+1))
+flrcca <- vegan::cca(fvolhybn[specpn=="KAAL",]~., data=log(flrhybn[specpn=="KAAL",]+1))
+flrcca <- vegan::cca(fvolhybn[specpn=="KAHO",]~., data=log(flrhybn[specpn=="KAHO",]+1))
+flrcca
+plot(flrcca)
+vegan:::summary.cca(flrcca)
+anova(flrcca)
+anova(flrcca, by="term")
+anova(flrcca, by="mar")
+anova(flrcca, by="axis")
+```
+
+#Total Emissions
+```{r te_figure}
+#TODO: convert these to emission rate (ng/flr/hr) #done - need to run command for svhybn$ngftot
+
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+
+svhybn.plants <- svhybn %>% group_by(SpeciesR, Individual) %>% summarize_at(vars(ngftot), mean)
+
+(ftot.medians <- svhybn.plants %>% group_by(SpeciesR) %>% summarize_at("ngftot", list( n=length, ngftot=median)) %>% mutate (tukey=c("a","a","a","a")))# was "a","b","b","b" for ftot
+
+  (teplot <-   ggplot(svhybn, aes(x=SpeciesR, y=ngftot, fill=SpeciesR))  +  
+    #geom_hline(yintercept=exp(mean(log(ftot.means$ftot[c(1,4)]))))  + #geometric mean of arithmetic means
+    #geom_violin() + 
+    geom_boxplot()+
+    geom_text(aes(label=tukey, y=110), data=ftot.medians)+ #for ftot was 2e7
+    geom_text(aes(label=paste("n =",n), y=1), data=ftot.medians)+ #for ftot was 3e4
+    scale_y_log10() + #labels=scientific_10
+    theme_pubr() + 
+    ylab(expression("Volatile emissions (ng/flower/hr)")) + 
+    scale_fill_manual(values=hybcolr) +guides(fill=F)+
+    scale_x_discrete("Species", labels=(c(expression(italic("S. kaalae")), "K x H", "H x K", expression(italic("S. hookeri"))))))
+ggsave("teplot_ng_yesoct_yeshex.png", teplot, height=5, width =4, type="cairo") 
+ggsave("teplot_ng_yesoct_yeshex.pdf", teplot, height=5, width =4, device=cairo_pdf) 
+```
+
+```{r te_model}
+#go down and run ngftot line first
+lm.ftot <- lm(ngftot~SpeciesR, data=svhybn) #got rid of log10 so this is testing the arithmetic mean now
+library(multcomp)
+lm.ftot %>% glht(linfct = mcp(SpeciesR=c("`H x K` - 0.5 * `S. kaalae` - 0.5 * `S. hookeri`== 0",
+                                         "`K x H` - 0.5 * `S. kaalae` - 0.5 * `S. hookeri`== 0"))) %>% 
+  summary() #test if hybrids are different from arithmetic average of two species
+lm.ftot %>% glht(linfct = mcp(SpeciesR="Tukey")) %>% summary #pairwise comparisons
+
+library(emmeans)
+em.ftot <- emmeans(lm.ftot, "SpeciesR") %>% regrid #regrid put is back on untransformed scale
+pairs(em.ftot)
+CLD(em.ftot)
+plot(em.ftot)
+```
+
+
+```{r te_misc}
+beanplot(log10(rowSums(vol[f,]))~specp, main="Log Total Emissions")
+beanplot(log10(rowSums(volhybn)/svhybn$Flrs)~specpn, main="Log Emissions per Flower", log="")
+beanplot(log10(ftot)~SpeciesR, data=svhybn, main="Log Emissions per Flower", log="")
+
+#library(ggbeeswarm) #geom_beeswarm(cex=2.8, size=2) +
+  
+plot(log10(rowSums(volhybn)/svhybn$Flrs)~specpn, main="Log Emissions per Flower")
+
+tapply((rowSums(volparn)/svparn$Flrs), specparn, mean)
+plot(log10(rowSums(volparn)/svparn$Flrs)~specparn)
+wilcox.test((rowSums(volparn)/svparn$Flrs)~specparn)
+tapply(log10(rowSums(volparn)/svparn$Flrs),specparn,mean)
+
+plot((log10(rowSums(volparn))~specparn))
+wilcox.test((rowSums(volparn))~specparn)
+tapply(rowSums(volparn),specparn,mean)
+
+#for manuscript
+wilcox.test((rowSums(volparn[,colnames(volparn) !="(Z)-hex-3-en-1-ol"]/svparn$Flrs))~specparn)
+
+aov.te <- aov(rowSums(volhybn)/svhybn$Flrs~specpn)
+aov.te <- aov(rowSums(fvol[f,])~specp)
+anova(aov.te)
+TukeyHSD(aov.te, ordered=TRUE)
+
+#Ratio of night and day
+aggregate((rowSums(volpar)/svpar$Flrs), list(svpar$SpeciesR,svpar$DN), mean)
+```
+
+```{r eperf}
+plot(rowSums(vol[f,])~sv$Flrs[f], col=specscol[specp], ylab="Total Emissions",xlab="Number of Flowers", main="Emissions ~ Flowers")
+legend("topright",legend=levels(specp), fill=specscol)
+summary(lm(rowSums(vol[f,])~specp+sv$Flrs[f]))
+qplot(sv$Flrs[f],rowSums(vol[f,]), col=specp, ylab="Total Emissions",xlab="Number of Flowers", main="Emissions ~ Flowers") +geom_smooth(se=F)
+```
+
+#Table of volatiles
+```{r tabsvol}
+#####    Need to use sdata3_hexoct.Rdata to make this table - includes octenol and hexenol
+
+### from 2dnmdspar######
+minsamp <- 2
+cutoff <- 0 #400000
+volhyb.cut <- volhyb[,colSums(volhyb>0) >= minsamp]
+volhyb.cut <- volhyb.cut[,colSums(volhyb.cut) > cutoff]
+
+exclude <-  specp == "KAHO"
+volpar <- volhyb.cut[!exclude,]; specpar <- factor(specp[!exclude]); svpar <- svhyb[!exclude,];
+parplantsdn <- paste(svpar$Population, svpar$Plant, svpar$Cutting, svpar$Diurnal, sep="-")
+hybplantsdn <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Diurnal, sep="-")
+dim(volpar)
+volparn <- volpar[svpar$StartSunset > eve,]
+svparn <- svpar[svpar$StartSunset > eve,]
+svparn.hist <- hist(as.numeric(svparn$StartSunset), breaks=3)
+svolparn <- decostand(volpar[svpar$StartSunset > eve,], "total")
+specparn <- specpar[svpar$StartSunset > eve]
+
+svdup <- svpar[duplicated(paste(svpar$Individual, svpar$DN)) | duplicated(paste(svpar$Individual, svpar$DN), fromLast=TRUE),]
+svdup_diel <- svpar[duplicated(svpar$Individual) | duplicated(svpar$Individual, fromLast=TRUE),]
+#dbls <- svolhyb[,is.na(match(colnames(svolhyb), chems$Name))]
+#for(i in 1:ncol(dbls)) { 
+#svolhyb[,substr(colnames(dbls)[i], 1, nchar(colnames(dbls)[i])-2)] <- svolhyb[,substr(colnames(dbls)[i], 1, nchar(colnames(dbls)[i])-2)]  + dbls[,i] }
+#svolhyb[,colnames(dbls)] <- NULL
+
+svolhyb.mean <- aggregate(. ~ specp, svolhyb, mean)[,-1]
+rownames(svolhyb.mean) <- levels(specp)
+library(SortableHTMLTables)
+sortable.html.table(cbind(colnames(svolhyb.mean),as.data.frame(t(round(svolhyb.mean, 3)))), "svolhyb3.html")
+tsvolhyb.mean <- as.data.frame(t(svolhyb.mean))
+tsvolhyb.chems <- cbind(tsvolhyb.mean, chems[match(rownames(tsvolhyb.mean), chems$Name),])
+write.table(tsvolhyb.chems, file="tsvolhybchems3.csv", sep="\t", row.names=F)
+
+
+volhybn.mean <- aggregate(. ~ specpn, volhybn, function(x) mean(x[x>0]))[,-1] #nonzero only !!!
+rownames(volhybn.mean) <- levels(specpn)
+tvolhybn.mean <- as.data.frame(t(volhybn.mean))
+
+#TODO move this to sdata3
+chems.pc.class <- read.table("./results/chemspc3_classes.csv", sep="\t", header=T)
+multipliers <- read.table("./input/multipliers.csv", header=T, sep="\t")
+ngvolhyb <- volhyb * multipliers$ngPerArea[match(chems.pc.class$Class,multipliers$Class)][col(volhyb)]
+ngvolhybn <- volhybn * multipliers$ngPerArea[match(chems.pc.class$Class,multipliers$Class)][col(volhybn)]
+ngfvolhyb <- ngvolhyb / svhyb$Flrs
+ngfvolhybn <- ngvolhybn / svhybn$Flrs
+svhybn$ngftot <- rowSums(ngvolhybn)/svhybn$Flrs
+ngfvolhybn.mean <- aggregate(. ~ specpn, ngfvolhybn, function(x) mean(x[x>0]))[,-1] #nonzero only !!!
+rownames(ngfvolhybn.mean) <- levels(specpn)
+tngfvolhybn.mean <- as.data.frame(t(ngfvolhybn.mean))
+
+volhybn.prop <- aggregate(. ~ specpn, volhybn, function(x) sum(x>0)/length(x))[,-1]
+rownames(volhybn.prop) <- levels(specpn)
+tvolhybn.prop <- as.data.frame(t(volhybn.prop))
+
+tvolhybn.chems <- cbind(tvolhybn.mean, tngfvolhybn.mean, tvolhybn.prop, chems.pc[match(rownames(tvolhybn.mean), chems.pc$Name),])
+write.table(tvolhybn.chems, file="tvolhybnchems3_evening.csv", sep="\t", row.names=T, col.names = NA)
+
+aggregate(rowSums(ngfvolhyb), list(svhyb$SpeciesR,svhyb$DN), function(x) c(mean(x), sd(x)))
+
+#for svolparn
+#dbls <- svolparn[,is.na(match(colnames(svolparn), chems$Name))]
+#for(i in 1:ncol(dbls)) { 
+#svolparn[,substr(colnames(dbls)[i], 1, nchar(colnames(dbls)[i])-2)] <- svolparn[,substr(colnames(dbls)[i], 1, nchar(colnames(dbls)[i])-2)]  + dbls[,i] }
+#svolparn[,colnames(dbls)] <- NULL
+
+svolparn.mean <- aggregate(. ~ specparn, svolparn, mean)[,-1]
+rownames(svolparn.mean) <- levels(specparn)
+library(SortableHTMLTables)
+sortable.html.table(cbind(colnames(svolparn.mean),as.data.frame(t(round(svolparn.mean, 3)))), "svolparn3.html")
+tsvolparn.mean <- as.data.frame(t(svolparn.mean))
+tsvolparn.chems <- cbind(tsvolparn.mean, chems[match(rownames(tsvolparn.mean), chems$Name),])
+write.table(tsvolparn.chems, file="tsvolparnchems3.csv", sep="\t",  row.names=F)
+```
+
+```{r dryad}
+#prep GC data for Dryad
+ngvolpar <- volpar * multipliers$ngPerArea[match(chems.pc.class$Class,multipliers$Class)][col(volpar)]
+
+svpar %>% select(Filename, SpeciesR, Population2, plantsi, Leaves, Inflor, Mphase, Fphase, Closed, Buds, Temp, StartSunset) %>% dplyr::rename(Species = SpeciesR, Population = Population2, Plant = plantsi, Bracts = Leaves) %>% 
+  mutate(StartSunset = round(as.numeric(StartSunset), 2),
+         Temp = as.integer(Temp),
+         Plant=as.integer(factor(Plant)),
+         Species = str_replace(as.character(Species), "S.", "Schiedea"),
+         Population = replace_na(Population, "Interpop")) %>%
+  arrange(Species, Population, Plant, Bracts, Inflor, Mphase, Fphase, Closed, Buds) %>% 
+  left_join(ngvolpar %>% rownames_to_column("Filename") %>% mutate_if(is.numeric, round, 2)) %>% #volpar has peak areas / hr (not normalized by number of flowers)
+  select(-Filename) %>% 
+  write_csv("./ptr/dryad/Schiedea_GCMS.csv") %>% str
+```
+
+
+# Rarity-abundance
+```{r rarity}
+#write.table(data.frame(index=1:ncol(fvolhybn), max=log10(apply(fvolhybn,2,max)), mean=log10(apply(fvolhybn,2,function(x){mean(x[x>0])}))),"rarity.csv", sep="\t", row.names=T)
+ccol.g <- as.character(read.delim("./input/rarity.csv")$color)#convert to CAS!
+ccol.g[ccol.g==""] <- "#888888"
+ccol.g <- "#888888"##REVERT
+set.seed(2)
+ccolhyb <- sample(rainbow(length(volhyb)))
+  
+rarity <- function(choice, makeplot=TRUE) {
+fvolhybn1 <- fvolhybn[specpn==choice, ]
+pavolhybn1 <- volhybn[specpn==choice, ]
+pavolhybn1[pavolhybn1>0] <-1
+
+x <- colSums(pavolhybn1/nrow(pavolhybn1))
+y <- apply(fvolhybn1,2,max)
+size <- apply(fvolhybn1,2,function(x){mean(x[x>0])})
+if(makeplot) {
+plot(log10(y)~x, cex=ifelse(log10(size)>2, (log10(size)-1.9)*3, 0.3), col=alpha(ccol.g,0.7), pch=19, main=paste("Maximum abundance vs. occurence for ",choice),sub="Circles sized by log mean nonzero abundance per flower",xlab="Fraction of samples",ylab="log maximum abundance per flower")
+labels <- sapply(colnames(volhyb), function(y) paste(strwrap(y, 60), collapse = "\n"))
+text(x,log10(y),labels=ifelse(sqrt(x^2+5*log10(y)^2)>7,labels, NA), xpd=T, cex=0.6)
+}
+return(data.frame(species = choice, prop = x, max = y, avg = size))
+}
+png("rarity_KAAL3.png", height=2000, width=2000)
+par(cex=3.5)
+rarity("KAAL")
+dev.off()
+png("rarity_KAHO3.png", height=2000, width=2000)
+par(cex=3.5)
+rarity("KAHO")
+dev.off()
+png("rarity_HOOK3.png", height=2000, width=2000)
+par(cex=3.5)
+rarity("HOOK")
+dev.off()
+
+rarity.df <- rbind(rarity("HOOK"), rarity("KAAL"))
+rarity.df$Name <- row.names(rarity.df)
+
+ggplot(rarity.df, aes(x=Name, y=avg, fill=species)) + geom_col() + coord_flip()
+
+sv.fvolhyb <- cbind(svhyb, fvolhyb)
+sv.fvolhyb.long <- gather(sv.fvolhyb, Name, Area, 56:ncol(sv.fvolhyb))
+
+spectimecol <- c(brewer.pal(3,"Purples")[2], brewer.pal(3,"Purples")[3], brewer.pal(3,"Greens")[2], brewer.pal(3,"Greens")[3])
+(spectimeplot <- ggplot(filter(sv.fvolhyb.long, 
+              SpeciesR %in% c("S. hookeri", "S. kaalae"), 
+              Name %in% names(volpar[,colSums(volpar) > 4000000])), aes(Name, Area, color=paste(SpeciesR, DN))) + 
+  geom_boxplot(position=position_dodge(width=1)) + 
+  coord_flip() + scale_y_sqrt("Peak area per flower", expand=expand_scale(mult=c(0, 0.05))) +
+  scale_color_manual("Species and Time", values=spectimecol) + 
+  theme_minimal())
+ggsave("spectime.pdf", spectimeplot, height=8, width=12, units="in", device=cairo_pdf)
+       
+x <- sapply(1:3, function(choice) {colSums(pavolhyb[specp==specs[choice],])/table(specp)[choice]})
+y <- sapply(1:3, function(choice) {log10(sapply(volhyb[specp==specs[choice],], max))})
+size <- sapply(1:3, function(choice) {log10(sapply(volhyb[specp==specs[choice],], function(x){mean(x[x>0])}))})
+plot(1, type="n", ylim=c(3,9), xlim=c(0,1), ylab="Maximum Relative Amount", xlab="Proportion of Samples")
+arrows(x[,1], y[,1], x[,3], y[,3], length=0.01, col=ccol, lty=2)
+arrows(x[,2], y[,2], x[,3], y[,3], length=0.01, col=ccol)
+p<-3
+points(y[,p]~x[,p], cex=ifelse(size[,p]>2, (size[,p]-1.9)*3, 0.3), col=alpha(ccol,0.4), xpd=T)
+text(x[,p], y[,p]-0.1, ifelse(x[,p]>0.2,names(x[,p]),""),xpd=T,cex=0.7)
+
+par(bg="grey20", col.axis="white", col.lab="white")
+x <- sapply(1:3, function(choice) {colMeans(svolhybn[specpn==specs[choice],])})
+plot(c(1,1,1)~factor(levels(specp), levels=levels(specp)), type="n", ylim=c(0,0.5), xlim=c(0.9,3.1), ylab="Average relative emission rate", xlab="")
+arrows(1, x[,1], 2, x[,3], length=0.01, col=ccolhyb, lwd=2)
+arrows(3, x[,2], 2, x[,3], length=0.01, col=ccolhyb, lwd=2)
+p<-3
+#points(x[,p]~2, cex=ifelse(size[,p]>2, (size[,p]-1.9)*3, 0.3), col=ccol, xpd=T)
+text(2, x[,p]+0.01, ifelse(x[,p]>0.05,names(x[,p]),""),xpd=T,cex=0.7, col=ccolhyb)
+p <- 1
+text(1, x[,p]+0.01, ifelse(x[,p]>0.05,names(x[,p]),""),xpd=T,cex=0.7, col=ccolhyb)
+p <- 2
+text(3, x[,p]+0.01, ifelse(x[,p]>0.05,names(x[,p]),""),xpd=T,cex=0.7, col=ccolhyb)
+```
+
+#Venn Diagram
+```{r venn}
+## Don't run this - changes volhyb!!!
+minsamp <- 3
+cutoff <- 2000
+#volhyb <- fvol[f,]
+volhyb <- volhyb[,colSums(volhyb>0) >= minsamp]
+volhyb <- volhyb[,colSums(volhyb) > cutoff]
+dim(volhyb)
+pavolhyb <- volhyb
+pavolhyb[pavolhyb>0] <- 1
+
+set.seed(2)
+ccolhyb <- sample(rainbow(length(volhyb)))
+
+plot(sort(colSums(pavolhyb)/dim(pavolhyb)[1]), ylab="Occurence", main="Filtered Compound rarity")
+
+venn <- aggregate(pavolhyb, by=list(specp), FUN=max)
+rownames(venn) <- venn[,1]
+venn[,1] <- NULL
+library(limma)
+vennDiagram(t(as.matrix(venn)), circle.col=specscol)
+
+##meanhyb <- aggregate(volhyb, by=list(specp), FUN=mean)
+```
+
+#Compounds Diversity
+```{r diversity}
+library(beanplot)
+library(vegan)
+
+#Number of compounds
+beanplot(rowSums(pavolhyb)~specp, las=2, log="", main="Number of compounds")
+anova(lm(rowSums(pavolhyb)~specp))
+
+svhybn$num_compounds <- rowSums(pavolhyb[svhyb$DN=="Night",])
+(ncplot <-   ggplot(svhybn, aes(x=SpeciesR, y=num_compounds, fill=SpeciesR))  +  
+    geom_boxplot()+    theme_pubr() + 
+    ylab(expression("Number of compounds")) + 
+    scale_fill_manual(values=hybcolr) +guides(fill=F)+
+    scale_x_discrete("Species", labels=(c(expression(italic("S. kaalae")), "K x H", "H x K", expression(italic("S. hookeri"))))))
+
+#Shannon diversity
+beanplot(diversity(volhybn, index="shannon")~specpn, main="Shannon diversity index")
+aggregate(diversity(volhybn, index="shannon"), list(specpn), mean)
+aggregate(diversity(volhybn, index="shannon"), list(specpn), function(x) c(mean(x),sd(x)))
+
+svhybn$shannon <- diversity(volhybn, index="shannon")
+(shannon_plot <-   ggplot(svhybn, aes(x=SpeciesR, y=shannon, fill=SpeciesR))  +  
+    geom_boxplot()+    theme_pubr() + 
+    ylab(expression("Shannon diversity index")) + 
+    scale_fill_manual("Species", values=hybcolr) +guides(fill=F)+
+    scale_x_discrete("Species", labels=(c(expression(italic("S. kaalae")), "K x H", "H x K", expression(italic("S. hookeri"))))))
+
+library(gridExtra)
+grid.arrange(teplot, ncplot, shannon_plot, nrow=1)
+
+#Big diversity plot
+library(multcomp)
+svhybn.long <- svhybn %>% dplyr::select(SpeciesR, ngftot, num_compounds, shannon) %>% pivot_longer(-one_of("SpeciesR"))
+diversity_vars <- list("ngftot", "num_compounds", "shannon")
+tukeys <- sapply(setNames(paste(diversity_vars, ' ~ SpeciesR'), diversity_vars), 
+       function(form) lm(form, data = svhybn) %>% glht(linfct = mcp(SpeciesR="Tukey")) %>% cld %>% `$`(mcletters) %>% `$`(Letters)) %>% 
+  as.data.frame %>% tibble::rownames_to_column("SpeciesR") %>% mutate(SpeciesR = factor(SpeciesR, levels=levels(svhybn$SpeciesR))) %>% pivot_longer(-one_of("SpeciesR")) %>% 
+ left_join(svhybn.long  %>%  group_by(name) %>% 
+  summarize(height = max(value) + .3 * sd(value)))
+
+(diversity_plot <-   ggplot(svhybn.long, aes(x=SpeciesR, y=value, fill=SpeciesR))  + 
+    facet_wrap("name", scales="free_y", strip.position = "left", nrow=1,
+               labeller=as_labeller(c(ngftot = "Volatile emissions (ng/flower/hr)", num_compounds="Number of compounds", shannon="Shannon diversity index")))+
+    geom_text(aes(label=value,y=height), data=tukeys)+
+    geom_boxplot()+    theme_pubr() + 
+    scale_fill_manual("Species", values=hybcolr) +
+    labs(y=NULL, x=NULL)+
+    theme(strip.background = element_blank(), strip.placement = "outside", strip.text = element_text(size=12),
+          legend.position = "bottom",
+          axis.text.x=element_blank(), axis.ticks.x=element_blank()))
+ggsave("diverity_yesoct_yeshex.png", diversity_plot, height=5, width =7, type="cairo") 
+ggsave("diversity_yesoct_yeshex.pdf", diversity_plot, height=5, width =7, device=cairo_pdf)
+
+hchyb <- hclust(vegdist(t(volhyb)), "aver")
+beanplot(treedive(volhyb, hchyb)~specp, main="Functional Diversity")
+
+beta <- mean(vegdist(volhyb, binary=TRUE))
+beta
+
+raremax <- min(rowSums(round(volhybn)))
+rare <- rarefy(round(volhybn), raremax)
+#TODO:fix this. from intro to vegan ESA 2017
+plot(specnumber(volhybn), rare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
+abline(0,1)
+rarecurve(round(volhybn), step=20, sample = raremax, col="blue", cex=0.6)
+```
+
+#Bar chart
+
+```{r barchart}
+mvolhyb <- volhyb
+mvolhyb$specp <- specp
+library(reshape2)
+meltvolhyb <- melt(mvolhyb, id.vars=c("specp"))
+par(mar=c(15,2,1,0))
+plot(log10(meltvolhyb$value+1)~meltvolhyb$variable, border="white", las=2, cex.axis=0.5, cex.lab=0.1, main="log compound amount per flower")
+points(log10(meltvolhyb$value+1)~meltvolhyb$variable, col=meltvolhyb$specp)
+
+par(mar=c(5,0,0,0), mfrow=c(2,1))
+srt <- order(specp, svhyb$Population, rowSums(volhyb))
+bp <- barplot(t(as.matrix(volhyb[srt,])), col=ccolhyb, border=NA, names.arg=paste(specp,svhyb$Population)[srt], col.axis="black", cex.names=0.8, axes=FALSE, las=2)
+
+
+srt <- order(svhyb$StartSunset)
+srt <- srt[specp[srt]=="HOOK"]
+srt <- srt[specp[srt]=="KAAL"]
+bp <- barplot(t(as.matrix(volhyb[srt,])), col=ccolhyb, border=NA, names.arg=paste(specp,signif(svhyb$StartSunset,2))[srt], col.axis="black", cex.names=0.8, axes=FALSE, las=2)
+
+points(x=bp, y=rep(-10000, length(bp)), xpd=T, pch=ifelse(svhyb$DN == "Day",1,19)[srt])
+svhyb$DTN <- svhyb$DN
+levels(svhyb$DTN) <- c("Day","Night","Afternoon")
+svhyb$DTN[svhyb$DN =="Day" & svhyb$Start >3600*16] <- "Afternoon"
+
+points(x=bp, y=rep(-1000000, length(bp)), xpd=T, pch=as.integer(svhyb$DTN)[srt])
+
+set.seed(1)
+mdshybn1 <- metaMDS(decostand(sqrt(volhybn), method="tot"),k=1,try=200, autotransform=F, trace=0)
+mdshybn1
+srt <- order(specpn,svhybn$Population, rowSums(volhybn))
+srt <- order(specpn, mdshybn1$points)
+srt <- order(mdshybn$points[,1])
+srt <- order(atan(mdshybn$points[,1]/(mdshybn$points[,2]+0.2)))
+par(mar=c(2,0,1,0))
+
+png(file = "barplot3.png", bg = "white", width=1600,height=1200)
+barplot(t(as.matrix(svolhybn[srt,])), col=ccolhyb, border=NA, col.axis="black", axisnames=T, axes=FALSE, las=2, names.arg=specpn[srt])
+dev.off()
+
+
+par(mfrow=c(1,1))
+plot.new()
+topn <- names(head(sort(colSums(volhyb), decreasing=T), n=10))
+legend("center", topn, fill=ccolhyb[order(colSums(volhyb), decreasing=T)], xpd=T, cex=70/max(nchar(topn)))
+```
+
+#Heatmap
+```{r heatmap_figure}
+set.seed(1)
+mdshybn1 <- metaMDS(decostand(ngvolhybn, method="hellinger"),k=1,try=200, autotransform=F, trace=0)
+mdshybn1
+
+library(seriation)
+callback = function(hc, mat){
+    sv = svd(t(mat))$v[,1]
+    dend = reorder(as.dendrogram(hc), wts = sv)
+    as.hclust(dend)
+}
+library(dendsort)
+library(pheatmap)
+library(viridis)
+library(grid)
+mincount <- 15
+srt <- order(svhybn$SpeciesR, -mdshybn1$points, decreasing=T)
+rn <- rownames(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount])
+
+###TODO MIGHT BE A BUG HERE see schiedea_gc.R globosa heatmap. annotations are using row.names=rn and matching them up somehow
+#changed to ng/hr
+cairo_pdf("hybheatmap4_4_ng.pdf", width=10.5, height=7.6)#10.5, 5.2
+png("hybheatmap4_4_ng.png", width=10.5, height=7.6, units="in", res=500)
+ph  <- pheatmap(as.matrix(t(ngfvolhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount][srt,]))^(1/3), 
+         cluster_cols=F, show_colnames=F,
+         clustering_method="mcquitty", clustering_distance_rows="correlation",
+         clustering_callback = function(hc, ...){dendsort(hc, type="average")},
+         scale="none", color=inferno(512),
+         annotation_col = data.frame(Species=as.integer(svhyb$SpeciesR[svhyb$DN=="Night"])[srt], row.names=rn), 
+         annotation_colors = list(Species=hybcolr), 
+         gaps_col = which(as.logical(diff(as.integer(svhyb$SpeciesR[svhyb$DN=="Night"])[srt]))),
+   cellwidth = 3.5, cellheight = 14, fontsize = 10, border_color = NA, legend=F, legend_breaks=NA, annotation_legend=F, cutree_rows=5
+)
+grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=c(0.165,0.54),y=0.964, gp=gpar(fontsize=10, col="white", fontface=4))
+grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.317,0.417),y=0.964, gp=gpar(fontsize=10, col="white", fontface=2))
+dev.off()
+```
+
+#Boxplots
+```{r boxplots}
+#changed to ng/hr
+mincount <- 23
+mfvolhyb <- ngfvolhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount]
+mfvolhyb$Species <- svhyb$SpeciesR[svhyb$DN=="Night"]
+library(reshape2)
+meltfvolhyb <- melt(mfvolhyb, id.vars=c("Species"))
+
+#put chemicals in order of NMDS
+set.seed(1)
+mdshybn1 <- metaMDS(decostand(sqrt(ngvolhybn), method="tot"),k=1,try=200, autotransform=F, trace=0)
+mdshybn1
+meltfvolhyb$variable <- reorder(meltfvolhyb$variable, -mdshybn1$species[match(meltfvolhyb$variable, row.names(mdshybn1$species))])
+levels(meltfvolhyb$variable)[match(c("(3E)-4,8-dimethylnona-1,3,7-triene",
+                                     "2,2,6-trimethylcyclohexane-1,4-dione",
+                                     "4-hydroxy-2,6,6-trimethyl-3-oxocyclohexene-1-carbaldehyde") , levels(meltfvolhyb$variable)) ] <- c("DMNT",                       "2,2,6-trimethylcyclohexane-\n1,4-dione",
+                                     "4-hydroxy-2,6,6-trimethyl-\n3-oxocyclohexene-\n1-carbaldehyde")
+
+ggplot(meltfvolhyb) + geom_boxplot(aes(x=Species, y=value, color=Species),  outlier.size=1) + 
+  facet_wrap(vars(variable), scales="free_y", ncol=4, labeller = labeller(variable = label_wrap_gen(18))) +
+  scale_color_manual(values=hybcolr) +
+  scale_y_sqrt("Emission rate (ng/flower/hr)") + theme_minimal() + #, labels=scientific_10
+  theme(axis.text.x=element_blank(), axis.title.x=element_blank(), panel.grid.major.x=element_blank(), legend.position = "top")
+ggsave("hyb_boxplots_ng.pdf", device=cairo_pdf, width=9, height=12)
+ggsave("hyb_boxplots_ng.png", width=9, height=12)
+```
+
+
+```{r heatmap_misc}
+
+library(RColorBrewer)
+my_palette <- colorRampPalette(c("white", "darkblue"))(n=999)
+#my_palette <- brewer.pal(9, "YlOrRd")
+heatmap(log10(as.matrix(volhyb[,colSums(volhyb)>10000])+1),Rowv=specp,Colv=sort(rowSums(volhyb)), RowSideColors=hybcol[as.integer(svhyb$Population)], margins=c(18,4), scale="none", col=my_palette)
+
+hybcolg <- c("red","green","red","red","red","green","blue","orange","red", "green")
+heatmap(log10(as.matrix(volhyb[,colSums(pavolhyb)>10][order(specp, svhyb$Population),])+1),Rowv=NA,Colv=sort(rowSums(volhyb)), RowSideColors=hybcolg[as.integer(svhyb$Population)][order(specp, svhyb$Population)], margins=c(20,0), scale="none", col=my_palette, labRow=NA)
+
+colMax <- function(data) sapply(data, max, na.rm = TRUE)
+
+heatmap(log10(as.matrix(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>10][order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"]),])+1),Rowv=NA,Colv=sort(rowSums(volhyb[svhyb$DN=="Night",])), RowSideColors=hybcolg[as.integer(svhyb$Population[svhyb$DN=="Night"])][order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"])], margins=c(20,0), scale="none", col=my_palette, labRow=NA, distfun=vegdist)
+# & colMax(volhyb[svhyb$DN=="Night",])>1000
+
+library(gplots)
+my_palette2 <- colorRampPalette(c("white", "darkblue"))
+sep <- diff(as.integer(as.factor(hybcolg[as.integer(svhyb$Population[svhyb$DN=="Night"])][order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"])])))!=0
+
+srt <- order(specpn,svhybn$Population, rowSums(volhybn))
+set.seed(1)
+mdshybn1 <- metaMDS(decostand(sqrt(volhybn), method="tot"),k=1,try=200, autotransform=F, trace=0)
+mdshybn1
+srt <- order(svhybn$SpeciesR, -mdshybn1$points, decreasing=T)
+
+library(viridisLite)
+#order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"])
+mincount <- 10
+png(file = "hybheatmap3_4.png", bg = "white", width=1600,height=2400) 
+  par(lwd=6)
+hybhm <- heatmap.2(as.matrix(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount][srt,])^(1/3),
+          RowSideColors=hybcolg[as.integer(svhyb$Population[svhyb$DN=="Night"])][srt], 
+          Rowv=F,Colv=order(colMeans(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount])),
+          margins=c(98,0), trace="none", scale="none", col=magma(512), labRow=NA, dendrogram="column", key=F,keysize=0.3,
+          sepcol="white",rowsep=which(sep,T), cexCol=5,
+          distfun=function(x){dist(x)}, 
+          hclustfun=function(x){hclust(x, method="mcquitty")})
+dev.off() #margin 54,0
+#Colv=order(colSums(volhyb[svhyb$DN=="Night",]))
+
+png(file = "parheatmap4.png", bg = "white", width=800,height=1200)
+heatmap.2(as.matrix(svolhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>10][order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"]),]),
+          RowSideColors=hybcolg[as.integer(svhyb$Population[svhyb$DN=="Night"])][order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"])], 
+          Rowv=F,Colv=order(colMeans(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>10])),
+          margins=c(54,0), trace="none", scale="none", col=my_palette2, labRow=NA, dendrogram="column", key=F,keysize=0.3,
+          sepcol="black",rowsep=which(sep,T), cexCol=2, 
+          distfun=function(x){dist(x)}, 
+          hclustfun=function(x){hclust(x, method="mcquitty")})
+dev.off()
+```
+
+#NMDS scree
+```{r scree, eval=FALSE}
+NMDS.scree<-function(x) { #where x is the name of the data frame variable
+plot(rep(1,10),replicate(10,metaMDS(x,autotransform=F,k=1)$stress),xlim=c(1,nrow(x)/10),ylim=c(0,0.5),xlab="# of Dimensions",ylab="Stress",main="NMDS stress plot")
+for (i in 1:(nrow(x)/10-2)) {
+points(rep(i+1,1),replicate(1,metaMDS(x,autotransform=F,k=i+1)$stress))
+}
+}
+NMDS.scree(wisconsin(sqrt(volhyb)))
+```
+
+#NMDS plot
+
+```{r 3dnmds}
+set.seed(1)
+mdshyb3 <- metaMDS(volhyb,k=3,try=100, autotransform=T, trace=0)
+mdshyb3
+ordirgl(mdshyb3, col=hybcol[svhyb$Population])
+```
+
+```{r 2dnmdsnight, fig.width=10, fig.asp=0.618}
+set.seed(1)
+mdshybn <- metaMDS(decostand(volhybn, method="hellinger"),k=2,try=200, autotransform=F, trace=0)
+mdshybn
+
+##### Base R plot #####
+#par(mar=c(0,0,0,0), bg="grey20", mfrow=c(1,1))
+png(filename="hybnmdsnight3_time_lumped.png", height=1200, width=1200)
+par(cex=2)
+ophyb <- ordiplot(mdshybn, type="n", ylim=c(min(mdshybn$points[,2]),max(mdshybn$points[,2])), xlim=c(min(mdshybn$points[,1]),max(mdshybn$points[,1])+0.1))
+#points(ophyb, what="species", col="grey80", select=sapply(volhybn, max)>0.01, pch=4, cex=sqrt(sapply(volhybn, max))/100)
+ordicross <- ordihull(mdshybn, groups = as.factor(hybplantsn), col="gray80", lwd=4) #Same cross or parental genotype 
+ordihybparents <- ordihull(mdshybn, groups = as.factor(hybparentsn), col="gray40", lwd=4) #Same parental genotype
+ordihull(mdshybn, groups = as.factor(hybplantsin), col="black", lwd=4)#same hybplantsiidual 
+#ordihull(mdshybn, groups = as.factor(hybplantsdnn), col="brown", lwd=4)#same inflo day/night 
+ordihull(mdshybn, groups = as.factor(hybplantsinflon), col="red", lwd=4.5)# same inflo, same time 
+#points(ophyb, what="sites", col=hybcol[as.integer(svhybn$Population)], pch=ifelse(svhybn$DN == "Day",17,19),cex=sqrt(rowSums(  volhybn))/300+0.5)
+#hybcolg<- c("red","green","red","red","red","green","blue","orange","red", "green")
+#points(ophyb, what="sites", col=hybcolg[as.integer(svhybn$Population)], pch=ifelse(svhybn$DN == "Day",17,19),cex=1)
+#text(ophyb, what="sites", col=hybcolg[as.integer(svhybn$Population)], labels=svhybn$Cutting, cex=0.7)
+points(ophyb, what="sites", col=hybcolr[as.integer(svhybn$SpeciesR)], pch=19,cex=1)
+legend("topright",legend=levels(svhybn$SpeciesR), fill=hybcolr, cex=1.5, text.col="black")
+text(ophyb, what="species", select = colSums(pavolhyb[svhyb$DN=="Night",])>30, col="magenta", labels=rank(-colSums(pavolhyb[svhyb$DN=="Night",]), ties.method="first"), cex=1.2, font=2)
+#legend("topright",legend=levels(as.factor(paste(svhybn$Population,svhybn$Species))), fill=hybcol, cex=0.8, text.col="black")
+dev.off()
+
+##### 2dnmdsnight ggplot #####
+library(ggpubr)
+library(ggvegan)
+#library(ggordiplots)
+#library(ggrepel)
+#hullcross <- gg_ordiplot(mdshybn, groups = as.factor(hybplantsn), plot=F)$df_hull
+#hullparents <- gg_ordiplot(mdshybn, groups = as.factor(hybparentsn), plot=F)$df_hull
+#hullplantsi <- gg_ordiplot(mdshybn, groups = as.factor(hybplantsin), plot=F)$df_hull
+#hullplantsinflo <- gg_ordiplot(mdshybn, groups = as.factor(hybplantsinflon), plot=F)$df_hull
+#hullplantsinflodate <- gg_ordiplot(mdshybn, groups = as.factor(hybplantsinflodaten), plot=F)$df_hull
+
+obj <- fortify(mdshybn)
+obj$Sample <- NA; obj$Sample[obj$Score=="sites"] <-  svhybn$Sample
+obj <- obj %>% left_join(svhybn %>% dplyr::select(c(Sample, SpeciesR, plants, parents, plantsi, plantsinflo, plantsinflodate, StartSunset))) %>% mutate(StartSunset = as.numeric(StartSunset))
+obj$occur <- NA; obj$occur[obj$Score=="species"] <- colSums(pavolhyb[svhyb$DN=="Night",])
+obj$ftotal <- NA; obj$ftotal[obj$Score=="species"] <- colSums(fvolhyb[svhyb$DN=="Night",])
+obj <- obj %>% arrange(NMDS2, NMDS1)
+
+(hybnplot <- ggplot(obj, aes(x=NMDS1, y=NMDS2)) + 
+    geom_path(data=filter(obj, Score=="sites"),aes(group=plants, color="cross"), size=1) +
+    geom_path(data=filter(obj, Score=="sites"),aes(group=parents, color="parents"), size=1) +
+    geom_path(data=filter(obj, Score=="sites"),aes(group=plantsi, color="plantsi"), size=1) +
+    geom_path(data=filter(obj, Score=="sites"),aes(group=plantsinflo, color="plantsinflo"), size=1) +
+    geom_path(data=filter(obj, Score=="sites"),aes(group=plantsinflodate, color="plantsinflodate"), size=1) +
+  scale_color_manual("",breaks=c("cross","parents","plantsi","plantsinflo","plantsinflodate"), labels=c("Cross","Clone","Plant","Inflorescence","Bag"), values=c(cross="grey90", parents="grey60", plantsi="grey30", plantsinflo=brewer.pal(6,"Set1")[6],plantsinflodate=brewer.pal(6,"Set1")[1],sites="white",species=NA)) +
+      coord_fixed(xlim=range(obj$NMDS1[obj$Score=="sites"])+c(-0.2,0.6), 
+                  ylim=range(obj$NMDS2[obj$Score=="sites"])) + theme_pubr()+
+    #scale_x_reverse(expand=c(0,0),labels=function(x) -x, breaks=c(-1,-0.5,0,0.5,1)) +
+    scale_x_continuous(expand=c(0,0))+
+    theme(legend.text = element_text(size=13)) + 
+    guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=3))))
+
+(hybplotn.spec <- hybnplot + 
+        scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+  geom_point(data=obj[obj$Score=="sites",], aes(fill=SpeciesR), shape=21, size=3, color="white") +
+    geom_text(data=obj[obj$Score=="species" & obj$ftotal>1.5e4 & obj$occur>nrow(volhybn)*0.20,], aes(label=Label), color="black", size=3.8) ) 
+
+ggsave("hybnmdsnight3.pdf", hybplotn.spec, height=8, width=10, device=cairo_pdf)
+ggsave("hybnmdsnight3.png", hybplotn.spec, height=8, width=10)
+
+
+(hybnplot.time <- hybnplot + scale_fill_viridis_c("Time after sunset (h)", direction=-1) + 
+  geom_point(data= obj[obj$Score=="sites",], aes(fill=StartSunset), shape=21, size=3, color="white"))
+
+
+(hybnplot.points <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) + 
+  scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+  geom_point(data=obj[obj$Score=="sites",], aes(fill=SpeciesR), shape=21, size=4, color="white")+
+     theme_pubr()+theme(legend.text = element_text(size=20)) + xlab("NMDS1")+
+    guides(fill = guide_legend(override.aes = list(size=10))))
+ggsave("hybnmdsnight3nolines.png", hybnplot.points, height=8, width=10)
+
+(hybnplot <- ggplot(obj, aes(x=NMDS1, y=NMDS2)) + 
+  geom_path(data=hullplantsi, aes(x=x,y=y, group=Group, col="plantsi"), size=1.5, inherit.aes = F) +
+  geom_path(data=hullplantsinflo, aes(x=x,y=y, group=Group, col="plantsinflo"), size=1.5, inherit.aes = F) +
+  geom_path(data=hullplantsinflodate, aes(x=x,y=y, group=Group, col="plantsinflodate"), size=1.5, inherit.aes = F) +
+  scale_color_manual("",breaks=c("cross","parents","plantsi","plantsinflo","plantsinflodate"), labels=c("Cross","Clone","Plant","Inflorescence","Bag"), values=c(cross="grey90", parents="grey70", plantsi="grey70", plantsinflo="grey40",plantsinflodate="grey10",sites="white",species=NA)) +
+      coord_fixed(xlim=range(obj$NMDS1[obj$Score=="sites"])+c(-0.1,0.5), ylim=range(obj$NMDS2[obj$Score=="sites"])) + theme_pubr()+
+    scale_x_reverse(expand=c(0,0),labels=function(x) -x, breaks=c(-1,-0.5,0,0.5,1)) +
+    theme(legend.text = element_text(size=13)) + 
+    guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=3))))
+
+(hybplotn.spec.notext <- hybnplot + scale_fill_manual("", values=hybcolr, na.translate=F) +
+  geom_point(data=obj[obj$Score=="sites",], aes(fill=SpeciesR), shape=21, size=4, color="white") ) 
+
+ggsave("hybnmdsnight3notext.png", hybplotn.spec.notext, height=7, width=9)
+
+
+#ophyb <- ordiplot(mdshyb, type="n", xlim=c(min(mdshyb$points[,1]),max(mdshyb$points[,1])),ylim=c(min(mdshyb$points[,2]),max(mdshyb$points[,2])))
+#text(ophyb, what="species", col="white", select=sapply(volhyb, max)>0.01, cex=sapply(volhyb, max)/100000)
+#text(ophyb, what="sites", labels=hybplants, col=hybcol[as.integer(svhyb$Population)], cex=0.7)
+#points(ophyb, what="sites", col=hybcol[as.integer(svhyb$Population)], pch=ifelse(svhyb$Start < 55000,1,19),cex=1.5)
+#ordihull(mdshyb, groups = svhyb$Population, col=hybcol, lwd=2)# same population
+#text(ophyb, what="sites", labels=svhyb$Sample, cex=0.7)
+```
+
+```{r 2dnmdsnightcentroid}
+#TODO:  lumping with hybparentsn doesn't work!!!
+#take the centroid for each plant (lump plant, inflorescence, bag, but not clones)
+obj.lump.sites <- obj %>% 
+  filter(Score=="sites") %>% 
+  mutate(hybparentsn=hybparentsn, hybplantsn=hybplantsn, hybplantsin=hybplantsin) %>% 
+  mutate_if(is.character, as.factor) %>%
+  group_by(Score, Label, SpeciesR, hybplantsn, hybparentsn, hybplantsin) %>% 
+  summarize_if(is.numeric, mean)
+
+obj.lump <- bind_rows(obj.lump.sites, obj %>% filter(Score!="sites"))
+
+(hybnplot <- ggplot(obj.lump, aes(x=NMDS1, y=NMDS2)) + 
+    coord_fixed(xlim=range(obj.lump$NMDS1[obj$Score=="sites"])+c(-0.1,0.5), ylim=range(obj.lump$NMDS2[obj.lump$Score=="sites"])) + 
+    theme_pubr()+
+    scale_x_continuous(expand=c(0,0),breaks=c(-1,-0.5,0,0.5,1))+
+    #scale_x_reverse(expand=c(0,0),labels=function(x) -x, breaks=c(-1,-0.5,0,0.5,1)) +
+    theme(legend.text = element_text(size=13)) + 
+    guides(fill = guide_legend(override.aes = list(size=5)), color=guide_legend(override.aes=list(size=3))))
+
+(hybplotn.spec <- hybnplot + 
+    scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+      scale_color_manual("",breaks=c("cross","parents"), labels=c("Cross","Clone"), values=c(cross="grey90", parents="grey40")) +
+    geom_path(data=obj.lump[obj.lump$Score=="sites",],aes(group=hybplantsn, color="cross"), size=1) +
+    geom_path(data=obj.lump[obj.lump$Score=="sites",],aes(group=hybparentsn, color="parents"), size=1) +
+    geom_point(data=obj.lump[obj.lump$Score=="sites",], aes(fill=SpeciesR), shape=21, size=2.5, color="white") +
+    geom_text_repel(data=obj.lump[obj.lump$Score=="species" & obj.lump$ftotal>1.5e4 & obj.lump$occur>nrow(volhybn)*0.20,], aes(label=Label), color="black", fontface="bold", alpha=0.5, point.padding=0, box.padding=0, seed=0) ) 
+
+ggsave("hybnmdsnight3_lump_plant.png", hybplotn.spec, height=8, width=10)
+ggsave("hybnmdsnight3_lump_plant.pdf", hybplotn.spec, height=8, width=10, device=cairo_pdf)
+```
+
+
+```{r 2dnmdsnightmean}
+svhybn$Individual
+volhybn.mean <- volhybn %>% mutate(Sample = svhybn$Sample) %>% 
+  left_join(dplyr::select(svhybn, c(Sample, SpeciesR, plants, parents, plantsi))) %>% 
+  mutate_if(is.character, as.factor) %>% 
+ group_by(SpeciesR, plants, parents, plantsi) %>% summarize_if(is.numeric, mean)
+
+volhybn.mean.vols <- volhybn.mean %>% ungroup %>% select_if(is.numeric)
+set.seed(1)
+mdshybn.mean <- metaMDS(decostand(volhybn.mean.vols, method="hellinger"),k=2,try=100, autotransform=F, trace=0)
+mdshybn.mean
+
+library(ggpubr)
+library(ggvegan)
+
+obj.mean <- fortify(mdshybn.mean)
+obj.mean$SpeciesR <- factor(NA,levels=levels(volhybn.mean$SpeciesR)); obj.mean$SpeciesR[obj.mean$Score=="sites"] <-  volhybn.mean$SpeciesR
+obj.mean$plants <- factor(NA,levels=levels(volhybn.mean$plants)); obj.mean$plants[obj.mean$Score=="sites"] <-  volhybn.mean$plants
+obj.mean$parents <- factor(NA,levels=levels(volhybn.mean$parents)); obj.mean$parents[obj.mean$Score=="sites"] <-  volhybn.mean$parents
+obj.mean$occur <- NA; obj.mean$occur[obj.mean$Score=="species"] <- colSums(pavolhyb[svhyb$DN=="Night",])
+obj.mean$ftotal <- NA; obj.mean$ftotal[obj.mean$Score=="species"] <- colSums(fvolhyb[svhyb$DN=="Night",])
+obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
+
+(hybplotn.mean.spec <- 
+    ggplot(obj.mean, aes(x=NMDS1, y=NMDS2)) + 
+    coord_fixed(xlim=range(obj.mean$NMDS1[obj.mean$Score=="sites"])+c(-0.55,0.1), 
+                ylim=range(obj.mean$NMDS2[obj.mean$Score=="sites"])) + 
+    theme_pubr()+
+    scale_x_continuous(expand=c(0,0))+
+    theme(legend.text = element_text(size=13)) + 
+    guides(fill = guide_legend(override.aes = list(size=5)), color=guide_legend(override.aes=list(size=3)))+
+    scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+      scale_color_manual("",breaks=c("cross","parents"), labels=c("Cross","Clone"), values=c(cross="grey90", parents="grey60")) +
+    geom_path(data=obj.mean[obj.mean$Score=="sites",],aes(group=plants, color="cross"), size=1) +
+    geom_path(data=obj.mean[obj.mean$Score=="sites",],aes(group=parents, color="parents"), size=1) +
+    geom_point(data=obj.mean[obj.mean$Score=="sites",], aes(fill=SpeciesR), shape=21, size=2.5, color="white") +
+    geom_text(data=obj.mean[obj.mean$Score=="species" & obj.mean$ftotal>1.5e4 & obj.mean$occur>nrow(volhybn)*0.20,], aes(label=Label), color="black",  alpha=1, size=3.8) 
+    ) 
+
+ggsave("hybnmdsnight3_mean_plant.png", hybplotn.mean.spec, height=8, width=10)
+ggsave("hybnmdsnight3_mean_plant.pdf", hybplotn.mean.spec, height=8, width=10, device=cairo_pdf)
+```
+
+```{r caphybn}
+#capscale == dbRDA
+caphybn <- capscale(decostand(volhybn, "hellinger") ~ svhybn$SpeciesR, distance="bray", metaMDSdist = F)
+caphybn
+anova(caphybn, by="term")
+
+#basic plot
+plot(caphybn, type="points")
+points(caphybn, display = "sites", col=hybcolr[svhybn$SpeciesR], pch=16)
+text(caphybn, display = "species", col="grey60", cex=0.8)
+ordispider(caphybn, group=hybplantsn)
+
+obj <- fortify(caphybn)
+obj$StartSunset <- NA; obj$StartSunset[obj$Score=="sites"] <-  as.numeric(svhybn$StartSunset)
+obj$SpeciesR <- factor(NA,levels=levels(svhybn$SpeciesR)); obj$SpeciesR[obj$Score=="sites"] <-  svhybn$SpeciesR
+obj$occur <- NA; obj$occur[obj$Score=="species"] <- colSums(pavolhyb[svhyb$DN=="Night",])
+obj$ftotal <- NA; obj$ftotal[obj$Score=="species"] <- colSums(fvolhyb[svhyb$DN=="Night",])
+obj[obj$Score=="centroids","SpeciesR"] <- levels(svhybn$SpeciesR)
+
+#take the centroid for each plant (lump plant, inflorescence, bag, but not clones)
+obj.lump.sites <- obj %>% 
+  filter(Score=="sites") %>% 
+  mutate(hybparentsn=hybparentsn, hybplantsn=hybplantsn, hybplantsin=hybplantsin) %>% 
+  mutate_if(is.character, as.factor) %>%
+  group_by(Score, SpeciesR, hybplantsn, hybparentsn, hybplantsin) %>% 
+  summarize_if(is.numeric, mean)
+
+#replace original rows with lumped ones
+obj.lump <- bind_rows(obj.lump.sites, obj %>% filter(Score!="sites"))
+
+#record the centroid for each cross for connecting lines
+obj.hybplantsn <- obj.lump.sites %>% 
+  group_by(Score, Label, SpeciesR, hybplantsn) %>% 
+  summarize_if(is.numeric, mean)
+  
+gg <- merge(df,aggregate(cbind(mean.x=x,mean.y=y)~class,df,mean),by="class")
+  
+obj.hybparentsn
+
+
+#plotting
+(hybnplot <- ggplot(obj.lump, aes(x=CAP2, y=CAP1)) + 
+    coord_fixed() + 
+    theme_pubr()+
+    #geom_hline(yintercept=0, color="grey80", linetype=2) + geom_vline(xintercept=0, color="grey80", linetype=2)+
+    theme(legend.text = element_text(size=13)) + 
+    guides(fill = guide_legend(override.aes = list(size=5, pch=21)), 
+           color=guide_legend(override.aes=list(size=3)),
+           shape=guide_legend(override.aes=list(fill="black", size=5))))
+
+(hybplotn.spec <- hybnplot + 
+    scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+      scale_color_manual("",breaks=c("cross","parents"), labels=c("Cross","Clone"), values=c(cross="grey60", parents="grey10")) +
+    #scale_shape_manual("", breaks=c("sites", "centroids"), values=c(centroids=25, sites=21), labels=c("Plant","Centroid"))+
+    geom_path(data=obj.lump[obj.lump$Score=="sites",],aes(group=hybplantsn, color="cross"), size=1) +
+    geom_path(data=obj.lump[obj.lump$Score=="sites",],aes(group=hybparentsn, color="parents"), size=1) +
+    #geom_point(data=obj.lump[obj.lump$Score=="centroids",], aes(fill=SpeciesR, shape=Score), size=3, color="white") + 
+    geom_point(data=obj.lump[obj.lump$Score=="sites",], aes(fill=SpeciesR), shape=21, size=3, color="white") +
+    geom_text_repel(data=obj.lump[obj.lump$Score=="species" & obj.lump$ftotal>1.5e4 & obj.lump$occur>nrow(volhybn)*0.20,], aes(label=Label), color="grey10", fontface="bold", alpha=1, size=3, point.padding=0, box.padding=0, seed=0) ) 
+
+
+#TODO!!! geom_path is linking points sequentially, better to connect to centroid - like ordispider
+ggsave("hybcapnight_lump_plant.png", hybplotn.spec, height=8, width=8, type="cairo")
+ggsave("hybcapnight_lump_plant.pdf", hybplotn.spec, height=8, width=8, device=cairo_pdf)
+```
+
+
+```{r tsne}
+set.seed(1)
+library(tsne)
+tsnehyb <- tsne(decostand(sqrt(volhyb), method="tot"),k=2, perplexity=30, max_iter=300)
+library(Rtsne)
+tsnehyb <- Rtsne(decostand(sqrt(volhyb), method="tot"),dims=2, perplexity=20, max_iter=1000)
+plot(tsnehyb$Y, col=hybcolg[as.integer(svhyb$Population)]) #Separates the two hybrid cross directions!!
+plot3d(tsnehyb$Y, col=hybcolg[as.integer(svhyb$Population)], axes=F, box=F)# weird, shouldn't plot 2d in 3d!
+
+tsnehyb3 <- Rtsne(decostand(sqrt(volhyb), method="tot"),dims=3, perplexity=40, max_iter=10000)
+plot3d(tsnehyb3$Y, col=hybcolg[as.integer(svhyb$Population)], axes=F, box=F)
+```
+
+```{r 2dnmdspar}
+minsamp <- 2
+cutoff <- 0 #400000
+volhyb.cut <- volhyb[,colSums(volhyb>0) >= minsamp]
+volhyb.cut <- volhyb.cut[,colSums(volhyb.cut) > cutoff]
+
+exclude <-  specp == "KAHO"
+volpar <- volhyb.cut[!exclude,]; specpar <- factor(specp[!exclude]); svpar <- svhyb[!exclude,];
+parplantsdn <- paste(svpar$Population, svpar$Plant, svpar$Cutting, svpar$Diurnal, sep="-")
+hybplantsdn <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Diurnal, sep="-")
+dim(volpar)
+volparn <- volpar[svpar$StartSunset > eve,]
+svparn <- svpar[svpar$StartSunset > eve,]
+svolparn <- decostand(volpar[svpar$StartSunset > eve,], "total")
+specparn <- specpar[svpar$StartSunset > eve]
+
+svolparn.cut <- svolparn[,colSums(svolparn>0) >= 10] #at least N samples
+svolparn.cut <- svolparn.cut[,colMax(svolparn.cut) > 0.01] #at least 1%
+
+heatmaply(svolparn.cut,RowSideColors = specparn, hclustfun)
+
+set.seed(1)
+mdspar <- metaMDS(decostand(volpar, method="hellinger"),k=2,try=100, autotransform=F, trace=0)
+mdspar
+library(Cairo)
+CairoPNG(file = "nmdspar_dupes3.png", bg = "grey70", width=4024,height=4024)
+par(mar=c(0,0,0,0), bg="grey60", mfrow=c(1,1))
+plot(mdspar$points, type="n")
+#points(mdspar, what="sites", col=c("black","white")[as.integer(svpar$StartSunset < -1)+1], pch=c(16,17)[as.integer(specpar)], cex=3)
+library(viridis)
+points(mdspar, what="sites", col=viridis(512, direction = -1)[round(512*(range01(as.numeric(svpar$Stop))))+1], pch=c(19,17)[as.integer(specpar)], cex=3)
+dupes <- c("060","282","070","276","069","274","079","279","078","080","216","238","144","181","176","198","139","175")
+text(mdspar, what="sites", labels=ifelse(svpar$Sample %in% dupes, svpar$Sample, ""), cex=2)
+#points(mdspar, what="sites", col=rainbow(10)[svpar$Population], pch=c(19,17)[as.integer(specpar)], cex=1)
+ordiarrows(mdspar, groups = as.factor(svpar$Individual), col="white", lwd=1, length=0, angle=25)
+#ordiarrows(mdspar, groups = as.factor(parplantsdn), col="white", lwd=4, length=0.3,order.by=svpar$StartSunset, angle=25)#same inflo day/night
+dev.off()
+#text(mdspar, display="species", cex=0.5)
+#orditorp(mdspar, display="species")
+
+fmdspar <- fortify(mdspar)
+ggplot(fmdspar[fmdspar$Score=="sites",], aes(x=NMDS1, y=NMDS2, color=as.numeric(svpar$StopSunset), shape=specpar)) + scale_color_viridis("Stop time [hr]", direction=-1) +geom_point(size=2)
+
+library(ggord)
+ggord(mdspar, grp_in=specpar)
+
+#"environmental" fitting - time 
+ef.Stop <- envfit(mdspar, svpar$StopSunset)
+plot(ef.Stop)
+ordisurf(mdspar, as.numeric(svpar$StopSunset), add = TRUE, col = "green4")
+
+#CAP=dbRDA
+cappar <- capscale(sqrt(volpar) ~ specpar*svpar$DN, distance="bray", metaMDSdist = F)
+cappar
+par(bg="grey30")
+ordiplot(cappar, type="n")
+points(cappar, what="sites", col=c("black","white")[as.integer(svpar$StartSunset < -1)+1], pch=c(19,17)[as.integer(specpar)], cex=1.2)
+ordiarrows(cappar, groups = as.factor(parplantsdn), col="white", lwd=1,order.by=svpar$StartSunset)
+ordirgl(cappar)
+#orditorp(cappar, display="species")
+
+caphyb <- capscale(sqrt(volhyb) ~ specp*svhyb$StopSunset, distance="bray", metaMDSdist = F)
+caphyb
+ordiplot(caphyb, type="n")
+points(caphyb, what="sites", col=viridis(512, direction = -1)[round(512*(range01(as.numeric(svhyb$StopSunset))))+1], pch=c(19,17,1)[as.integer(specp)], cex=1)
+ordiarrows(caphyb, groups = as.factor(hybplantsdn), col="white", lwd=1,order.by=svhyb$StopSunset)
+
+ordiplot(caphyb, display="species", type="text")
+ggord.cap(caphyb, vec_ext=0.2, ellipse=F, grp_in=specp)
+
+capdf <- data.frame() 
+####for revisions, changed this from hellinger to sqrt
+#Frontiers: keep octenol but not hexenol, go up to top and and exclude resamples
+cappar2 <- capscale(sqrt(volpar[,colnames(volpar) != "(Z)-hex-3-en-1-ol"]) ~ SpeciesR*StopSunset, 
+                    distance="bray", metaMDSdist = F, data=svpar)
+cappar2
+anova.cca(cappar2, by="axis")
+anova.cca(cappar2, by="term", permutations=99999)
+anova.cca(cappar2, by="margin")
+axes <- c("CAP1","CAP2")
+
+write.csv(cappar2$CCA$v, "cappar2_abso_yesoct_nohex.csv")
+
+cappar2_switched <- capscale(decostand(volpar, method="hellinger") ~ StopSunset*SpeciesR, distance="bray", metaMDSdist = F, data=svpar)
+anova.cca(cappar2_switched, by="term", permutations=99999)
+
+cappar2_noint <- capscale(decostand(volpar, method="hellinger") ~ specpar+svpar$StopSunset, distance="bray", metaMDSdist = F)
+anova.cca(cappar2_noint, by="margin")
+drop1(cappar2_noint, test="permutation") # http://www.stats.ox.ac.uk/pub/MASS3/Exegeses.pdf #, scope=.~. for Type III (bad)
+
+(capplot <- ggplot(as.data.frame(cappar2$CCA$wa[, axes]), aes(x=CAP1, y=CAP2, color=as.numeric(svpar$StopSunset), shape=svpar$Population)) + scale_color_viridis("Stop time [hr]", direction=-1) + geom_point(size=3) + theme_bw() + scale_shape_manual("Species", values=1:8))
+
+ggord.cap(cappar2, vec_ext=0.2, ellipse=F, grp_in=specpar)
+
+#####CAP plot#####
+
+pairup <-
+  function (object, axes, groups,  order.by) {
+    pts <- object[,axes]
+    npoints <- nrow(pts)
+      ord <- order(order.by)
+      pts <- pts[ord,]
+      groups.orig <- groups
+      groups <- groups[ord]
+    out <- seq(along = groups)
+    inds <- names(table(groups))
+    out1 <- out2 <- rep(NA, length(inds))
+    output = data.frame(out1, out2, row.names=inds)
+    for (is in inds) {
+      gr <- out[groups == is]
+      if (length(gr) > 1) {
+        X <- pts[gr, , drop = FALSE]
+        X0 <- X[-nrow(X), , drop = FALSE]
+        X1 <- X[-1, , drop = FALSE]
+        nseg <- 1 #nrow(X0)
+        output[is,] = c(X0[nseg, 1], X0[nseg, 2])
+      } else {
+        output[is,] = c(NA, NA)
+      }
+    }
+    output.site <- output[match(groups.orig, row.names(output)),]
+    rownames(output.site) <- object$Label
+    colnames(output.site) <- paste0("start",axes)
+    return(output.site)
+  }
+
+library(ggvegan)
+library(ggrepel)
+exp_var = paste0(axes, ' (', format(100 * summary(cappar2)$concont$importance[2, axes], digits=2, trim=T), '% constrained inertia)')
+obj <- fortify(cappar2, scaling="symmetric")
+obj$StopSunset <- NA; obj$StopSunset[obj$Score=="sites"] <-  as.numeric(svpar$StopSunset)
+obj$specpar <- 3; obj$specpar[obj$Score=="sites"] <-  specpar; obj$specpar <- factor(obj$specpar)
+obj$Label <- as.character(obj$Label)
+#obj$Label[obj$Score=="species"] <- tolower(obj$Label[obj$Score=="species"])
+#obj$Label[obj$Score=="biplot"] <- c("S. kaalae", "time", "S. kaalae * time")
+obj$Label[obj$Score=="biplot"] <- c("S. hookeri", "time", "S. hookeri * time")
+obj$Label <- as.factor(obj$Label)
+#as.numeric(svpar$StopSunset) specpar
+obj[obj$Score=="sites",axes] <- obj[obj$Score=="sites",axes]*1.5
+obj[obj$Score=="biplot",axes] <- obj[obj$Score=="biplot",axes]*3.5
+obj$startCAP2 <- obj$startCAP1  <- 0
+obj[obj$Score=="sites",paste0("start",axes)] <- pairup(droplevels(obj[obj$Score=="sites",]), axes, groups=parplantsdn, order.by=svpar$StopSunset)
+obj[obj$Score=="sites",paste0("start",axes)][rowSums(obj[obj$Score=="sites",paste0("start",axes)] - obj[obj$Score=="sites",axes]) %in% c(0, NA), paste0("start",axes)] <- NA #arrow to same point
+
+(capplot <- ggplot() + 
+    theme_bw(base_size=12) + 
+    geom_segment(data = obj[obj$Score %in% c("biplot", "sites"), ], aes(x = startCAP1, y = startCAP2, xend = CAP1, yend = CAP2, size=Score), colour = "grey60", arrow = arrow(length = unit(2, "mm"), type="closed"))+ scale_size_manual(values=unit(c(0.5,0.5), "mm"), guide=F)+
+    geom_point(data = obj[obj$Score=="sites" | (obj$Score=="species" & (obj$CAP1^2 + obj$CAP2^2) > 0.15), ], aes(x = CAP1, y = CAP2, color=StopSunset, shape=specpar), size=2) + 
+    scale_color_viridis("Sunset offset (h)", direction=-1, option="C", na.value="black") + 
+    scale_shape_manual("Species", values=c(16,15,4))  + guides(shape=FALSE) +
+    geom_text_repel(data = obj[obj$Score %in% c("species","biplot"), ], seed=1, box.padding=0, point.padding=0.2,min.segment.length=1, size=3, color="black", aes(x = CAP1, y = CAP2, fontface=ifelse(Score=="biplot","bold.italic","italic"), label=ifelse((CAP1^2 + CAP2^2) > 0.15, as.character(Label), NA))) + 
+    coord_flip() + 
+    theme(legend.position = c(0.83,0.775),
+          legend.background=element_rect(fill=alpha("black",0)), legend.key.height=unit(8,"mm"),
+          plot.margin=unit(c(1,1,1,1),"mm"), axis.line = element_blank(), 
+          title = element_text(color = "black",size=12), axis.text = element_text(color="black"),
+          panel.border=element_rect(color="black", size=0.5), 
+          axis.ticks = element_line(color="black"),
+          panel.grid = element_blank()) + 
+    scale_x_continuous(exp_var[1], minor_breaks=NULL)+ 
+    scale_y_continuous(exp_var[2], minor_breaks=NULL))
+ggsave(capplot, file="capplot3_yesoct_yeshex.pdf", height=150, width=150, units="mm", device=cairo_pdf)
+ggsave(capplot, file="capplot3.eps", height=150, width=150, units="mm", dpi=600, device=cairo_ps)
+ggsave(capplot, file="capplot3.png", height=150, width=150, units="mm", dpi=600)
+
+View(chems[match(as.character(obj[obj$Score=="species","Label"][order(obj[obj$Score=="species","CAP1"])]), tolower(as.character(chems$Name))),])
+#PERMANOVA
+
+adonis(decostand(sqrt(volpar), method="tot")~specpar*svpar$StopSunset, permutations=9999)
+adonis(decostand(sqrt(volhyb), method="tot")~specp*svhyb$StopSunset, permutations=9999)
+
+#TODO try this repeated measures!
+#MANOVA.RM::RM(decostand(sqrt(volpar), method="tot")~specpar*svpar$DN)
+
+
+```
+
+
+```{r capeach}
+library(ggvegan)
+library(ggrepel)
+
+#CAP for each parent
+volHOOK <- volhyb.cut[specp=="HOOK",colnames(volhyb.cut)!="(Z)-hex-3-en-1-ol"] #!="oct-1-en-3-ol"
+specHOOK <- factor(specp[specp=="HOOK"])
+svHOOK <- svhyb[specp=="HOOK",]
+HOOKplantsdn <- parplantsdn[specpar=="HOOK"]
+#revision changed from hellinger to sqrt
+cap.HOOK <- capscale(sqrt(volHOOK) ~ svHOOK$StopSunset, distance="bray", metaMDSdist = F)
+anova.cca(cap.HOOK, by="term", permutations=99999)
+plot(cap.HOOK)
+points(cap.HOOK, col=viridis(512, direction=-1)[round(range01(as.numeric(svHOOK$StopSunset))*511)+1], pch=19)
+
+axes <- c("CAP1","MDS1")
+exp_var <- axes
+objHOOK <- fortify(cap.HOOK, scaling="symmetric")
+objHOOK$CAP1 <- -objHOOK$CAP1
+objHOOK$StopSunset <- NA; objHOOK$StopSunset[objHOOK$Score=="sites"] <-  as.numeric(svHOOK$StopSunset)
+objHOOK$Size <- 1; objHOOK$Size[objHOOK$Score=="sites"] <-  sqrt(as.numeric(svHOOK$Abundance))/200
+objHOOK$Start <- NA; objHOOK$Start[objHOOK$Score=="sites"] <-  as.numeric(svHOOK$Start)
+objHOOK$specHOOK <- 3; objHOOK$specHOOK[objHOOK$Score=="sites"] <-  specHOOK; objHOOK$specHOOK <- factor(objHOOK$specHOOK)
+levels(svHOOK$Population2)[43] <- "Interpop"
+svHOOK[2,"Population2"]<-"Interpop" #plant ID DNE
+objHOOK$popHOOK <- "Compound"; objHOOK$popHOOK[objHOOK$Score=="sites"] <-  as.character(svHOOK$Population2); objHOOK$popHOOK <- factor(objHOOK$popHOOK, levels = c(as.character(unique(svHOOK$Population2)),"Compound"))
+objHOOK$Label <- as.character(objHOOK$Label)
+#objHOOK$Label[objHOOK$Score=="species"] <- gsub("e)", "E)", tolower(objHOOK$Label[objHOOK$Score=="species"]), fixed=T)
+#objHOOK$Label[objHOOK$Score=="species"] <- gsub("z)", "Z)", tolower(objHOOK$Label[objHOOK$Score=="species"]), fixed=T)
+objHOOK$Label[objHOOK$Score=="biplot"] <- c("time")
+objHOOK$Label <- as.factor(objHOOK$Label)
+objHOOK[objHOOK$Score=="sites",axes] <- objHOOK[objHOOK$Score=="sites",axes]*1
+objHOOK[objHOOK$Score=="biplot",axes] <- objHOOK[objHOOK$Score=="biplot",axes]*1
+objHOOK$startMDS1 <- objHOOK$startCAP1  <- 0
+objHOOK[objHOOK$Score=="sites",paste0("start",axes)] <- pairup(droplevels(objHOOK[objHOOK$Score=="sites",]), axes, groups=HOOKplantsdn, order.by=svHOOK$StopSunset)
+objHOOK[objHOOK$Score=="sites",paste0("start",axes)][rowSums(objHOOK[objHOOK$Score=="sites",paste0("start",axes)] - objHOOK[objHOOK$Score=="sites",axes]) %in% c(0, NA), paste0("start",axes)] <- NA #arrow to same point
+
+capplotHOOK <- ggplot() + 
+    theme_bw(base_size=12) + 
+    geom_segment(data = objHOOK[objHOOK$Score %in% c("sites"), ], aes(x = startCAP1, y = startMDS1, xend = CAP1, yend = MDS1, size=Score), colour = "grey60", arrow = arrow(length = unit(2, "mm"), type="closed"))+ scale_size_manual(values=unit(c(0.5,0.5), "mm"), guide=F)+
+    scale_fill_viridis("Sunset offset (h)", direction=-1, option="C", na.value="black", limits=c(-4.9,4.5), breaks=-4:4) + 
+  scale_shape_manual("Population", values=c(22,21,23,4)) +
+    theme(legend.position = "left",legend.spacing = unit(0,"cm"),
+          legend.background=element_rect(fill=alpha("black",0)), legend.key.height=unit(8,"mm"),
+          plot.margin=unit(c(1,1,1,1),"mm"), axis.line = element_blank(), 
+          title = element_text(color = "black",size=12), axis.text = element_text(color="black"),
+          panel.border=element_rect(color="black", size=0.5), 
+          axis.ticks = element_line(color="black"),
+          panel.grid = element_blank()) + 
+    scale_x_continuous(paste0("CAP (", round(summary(cap.HOOK)$cont$importance[2,1],2)*100, "% of total variance)"), minor_breaks=NULL)+ 
+    scale_y_continuous(paste0(exp_var[2]," (", round(summary(cap.HOOK)$cont$importance[2,2],2)*100, "% of total variance)"), minor_breaks=NULL)
+
+(capplotHOOK_repel <- capplotHOOK + 
+  geom_point(data = objHOOK[objHOOK$Score=="sites" | (objHOOK$Score=="species" & (objHOOK$CAP1^2 + objHOOK$MDS1^2) > 0.08), ], aes(x = CAP1, y = MDS1, fill=StopSunset, shape=popHOOK), size=2.5) +
+  geom_text_repel(data = objHOOK[objHOOK$Score %in% c("species"), ], seed=2, box.padding=0.1, point.padding=0.2,min.segment.length=2, size=3, color="black", aes(x = CAP1, y = MDS1, fontface=ifelse(Score=="biplot","bold.italic","italic"), label=ifelse((CAP1^2 + MDS1^2) > 0.08, as.character(Label), NA))) )
+
+(capplotHOOK_nox <- capplotHOOK + geom_point(data = objHOOK[objHOOK$Score=="sites", ], aes(x = CAP1, y = MDS1, fill=StopSunset, shape=popHOOK), size=2.5) + geom_text_repel(data = objHOOK[objHOOK$Score %in% c("species"), ], seed= 1, point.padding=NA, box.padding =0.1, size=3, color="black", aes(x = CAP1, y = MDS1, label=ifelse((CAP1^2 + MDS1^2) > 0.08, as.character(Label), NA))) + ggtitle("b. Schiedea hookeri") + theme(plot.title=element_text(face="italic")))
+      
+ggsave(capplotHOOK_nox, file="capplot3HOOKyesoct_nohex_nox_nodup_abso.pdf", height=150, width=190, units="mm", dpi=600, device=cairo_pdf)
+
+(capplotHOOK <- ggplot(data.frame(CAP1=cap.HOOK$CCA$wa, MDS1=cap.HOOK$CA$u[,"MDS1"]), aes(x=CAP1, y=MDS1, color=as.numeric(svHOOK$StopSunset), shape=svHOOK$Population)) + scale_color_viridis("Stop time [hr]", direction=-1) + geom_point(size=3) + theme_bw() + scale_shape_manual("Population", values=1:8))
+
+rownames(volHOOK) <- paste(rownames(volHOOK), round(svHOOK$StopSunset,2))
+png(file = "barplot3HOOK.png", bg = "white", width=600,height=600)
+srt <- order(objHOOK[objHOOK$Score %in% c("sites"),]$CAP1)
+srt <- order(objHOOK[objHOOK$Score %in% c("sites"),]$StopSunset)
+#srt <- order(objHOOK[objHOOK$Score %in% c("sites"),]$Start)
+set.seed(4)
+colHOOK <- sample(rainbow(112))
+par(mar=c(7,0,0,0))
+barplot(t(as.matrix(volHOOK[srt,])), col=colHOOK, border=NA, col.axis="black", axisnames=T, axes=FALSE, las=2, names.arg=rownames(volHOOK[srt,]))
+dev.off()
+
+plotlyHOOK <- as.data.frame(cbind(samp=factor(rownames(volHOOK)[srt], levels=rownames(volHOOK)[srt]), volHOOK[srt,colnames(volHOOK) !=c("oct-1-en-3-ol")]))
+plotlyHOOK <- melt(plotlyHOOK,id.vars = "samp")
+layout(ggplotly(ggplot(plotlyHOOK, aes(x = samp, y = value,fill=variable)) +
+    geom_bar(stat='identity') + guides(fill=F) + theme(axis.text.x=element_text(angle = -90, hjust = 0)) + scale_fill_manual(values=colHOOK)),showlegend = FALSE)
+
+
+#CAP for each parent
+volKAAL <- volhyb.cut[specp=="KAAL",colnames(volhyb.cut)!="(Z)-3-hexen-1-ol"]#"oct-1-en-3-ol"
+specKAAL <- factor(specp[specp=="KAAL"])
+svKAAL <- svhyb[specp=="KAAL",]
+KAALplantsdn <- parplantsdn[specpar=="KAAL"]
+#revision changed from hellinger to sqrt
+cap.KAAL <- capscale(sqrt(volKAAL) ~ svKAAL$StopSunset, distance="bray", metaMDSdist = F)
+anova.cca(cap.KAAL, by="term", permutations=9999)
+plot(cap.KAAL)
+points(cap.KAAL, col=viridis(512, direction=-1)[round(range01(as.numeric(svKAAL$StopSunset))*511)+1], pch=19)
+
+axes <- c("CAP1","MDS1")
+exp_var <- axes
+objKAAL <- fortify(cap.KAAL, scaling="symmetric")
+#objKAAL$MDS1 <- -objKAAL$MDS1
+objKAAL$StopSunset <- NA; objKAAL$StopSunset[objKAAL$Score=="sites"] <-  as.numeric(svKAAL$StopSunset)
+objKAAL$specKAAL <- 3; objKAAL$specKAAL[objKAAL$Score=="sites"] <-  specKAAL; objKAAL$specKAAL <- factor(objKAAL$specKAAL)
+levels(svKAAL$Population2)[43] <- "Interpop"
+objKAAL$popKAAL <- "Compound"; objKAAL$popKAAL[objKAAL$Score=="sites"] <-  as.character(svKAAL$Population2); objKAAL$popKAAL <- factor(objKAAL$popKAAL, levels = c(as.character(unique(svKAAL$Population2)),"Compound"))
+objKAAL$Label <- as.character(objKAAL$Label)
+objKAAL$Label[objKAAL$Score=="species"] <- tolower(objKAAL$Label[objKAAL$Score=="species"])
+objKAAL$Label[objKAAL$Score=="biplot"] <- c("time")
+objKAAL$Label <- as.factor(objKAAL$Label)
+objKAAL[objKAAL$Score=="sites",axes] <- objKAAL[objKAAL$Score=="sites",axes]*1
+objKAAL[objKAAL$Score=="biplot",axes] <- objKAAL[objKAAL$Score=="biplot",axes]*1
+objKAAL$startMDS1 <- objKAAL$startCAP1  <- 0
+objKAAL[objKAAL$Score=="sites",paste0("start",axes)] <- pairup(droplevels(objKAAL[objKAAL$Score=="sites",]), axes, groups=KAALplantsdn, order.by=svKAAL$StopSunset)
+objKAAL[objKAAL$Score=="sites",paste0("start",axes)][rowSums(objKAAL[objKAAL$Score=="sites",paste0("start",axes)] - objKAAL[objKAAL$Score=="sites",axes]) %in% c(0, NA), paste0("start",axes)] <- NA #arrow to same point
+
+capplotKAAL <- ggplot() + 
+    theme_bw(base_size=12) + 
+    geom_segment(data = objKAAL[objKAAL$Score %in% c("sites"), ], aes(x = startCAP1, y = startMDS1, xend = CAP1, yend = MDS1, size=Score), colour = "grey60", arrow = arrow(length = unit(2, "mm"), type="closed"))+ scale_size_manual(values=unit(c(0.5,0.5), "mm"), guide=F)+
+    scale_fill_viridis("Sunset offset (h)", direction=-1, option="C", na.value="black", limits=c(-4.9,4.5), breaks=-4:4) + 
+    scale_shape_manual("Population", values=c(22:25,21,4))   +
+    theme(legend.position = "left",
+          legend.background=element_rect(fill=alpha("black",0)), legend.key.height=unit(8,"mm"),
+          plot.margin=unit(c(1,1,1,1),"mm"), axis.line = element_blank(), 
+          title = element_text(color = "black",size=12), axis.text = element_text(color="black"),
+          panel.border=element_rect(color="black", size=0.5), 
+          axis.ticks = element_line(color="black"),
+          panel.grid = element_blank()) + 
+ scale_x_continuous(paste0("CAP (", round(summary(cap.KAAL)$cont$importance[2,1],2)*100, "% of total variance)"), minor_breaks=NULL)+ 
+    scale_y_continuous(paste0(exp_var[2]," (", round(summary(cap.KAAL)$cont$importance[2,2],2)*100, "% of total variance)"), minor_breaks=NULL)
+
+(capplotKAAL_repel <- capplotKAAL + 
+  geom_point(data = objKAAL[objKAAL$Score=="sites" | (objKAAL$Score=="species" & (objKAAL$CAP1^2 + objKAAL$MDS1^2) > 0.05), ], aes(x = CAP1, y = MDS1, fill=StopSunset, shape=popKAAL), size=2.5) +
+  geom_text_repel(data = objKAAL[objKAAL$Score %in% c("species"), ], seed=4, box.padding=0.1, point.padding=0.2,min.segment.length=2, size=3, color="black", aes(x = CAP1, y = MDS1, fontface=ifelse(Score=="biplot","bold.italic","italic"), label=ifelse((CAP1^2 + MDS1^2) > 0.05, as.character(Label), NA))) )
+
+(capplotKAAL_nox <- capplotKAAL + geom_point(data = objKAAL[objKAAL$Score=="sites", ], aes(x = CAP1, y = MDS1, fill=StopSunset, shape=popKAAL), size=2.5) + geom_text_repel(data = objKAAL[objKAAL$Score %in% c("species"), ], seed=1, point.padding=NA, box.padding =0.1, size=3, color="black", aes(x = CAP1, y = MDS1, label=ifelse((CAP1^2 + MDS1^2) > 0.03, as.character(Label), NA))) + ggtitle("a. Schiedea kaalae") + theme(plot.title=element_text(face="italic")))
+
+ggsave(capplotKAAL_nox, file="capplot3KAALyesoct_nohex_nox_nodup_abso.pdf", height=150, width=190, units="mm", dpi=600, device=cairo_pdf)
+
+(capplotKAAL <- ggplot(data.frame(CAP1=cap.KAAL$CCA$wa, MDS1=cap.KAAL$CA$u[,"MDS1"]), aes(x=CAP1, y=MDS1, color=as.numeric(svKAAL$StopSunset), shape=svKAAL$Population)) + scale_color_viridis("Stop time [hr]", direction=-1) + geom_point(size=3) + theme_bw() + scale_shape_manual("Population", values=1:8))
+
+rownames(volKAAL) <- paste(rownames(volKAAL), round(svKAAL$StopSunset,2))
+png(file = "barplot3KAAL.png", bg = "white", width=600,height=600)
+#srt <- order(objKAAL[objKAAL$Score %in% c("sites"),]$CAP1)
+srt <- order(objKAAL[objKAAL$Score %in% c("sites"),]$StopSunset)
+#srt <- order(objKAAL[objKAAL$Score %in% c("sites"),]$Start)
+set.seed(4)
+colKAAL <- sample(rainbow(112))
+par(mar=c(7,0,0,0))
+barplot(t(as.matrix(volKAAL[srt,])), col=colKAAL, border=NA, col.axis="black", axisnames=T, axes=FALSE, las=2, names.arg=rownames(volKAAL[srt,]))
+dev.off()
+
+plotlyKAAL <- as.data.frame(cbind(samp=factor(rownames(volKAAL)[srt], levels=rownames(volKAAL)[srt]), volKAAL[srt,colnames(volKAAL) !=c("oct-1-en-3-ol")]))
+plotlyKAAL <- melt(plotlyKAAL,id.vars = "samp")
+layout(ggplotly(ggplot(plotlyKAAL, aes(x = samp, y = value,fill=variable)) +
+    geom_bar(stat='identity') + guides(fill=F) + theme(axis.text.x=element_text(angle = -90, hjust = 0)) + scale_fill_manual(values=colKAAL)),showlegend = FALSE)
+
+
+#COMBINE HOOK and KAAL CAP PLOTS
+library(gridExtra)
+capplotBOTH <- grid.arrange(capplotKAAL_nox, capplotHOOK_nox, nrow = 2)
+ggsave(capplotBOTH, file="capplot3BOTHyesoct_nohex_nox_nodup_abso.pdf", height=300, width=190, units="mm", device=cairo_pdf)
+```
+
+```{r 2dnmds, fig.width=10, fig.asp=0.618}
+set.seed(1)
+mdshyb <- metaMDS(decostand(sqrt(volhyb), method="tot"),k=2,try=100, autotransform=F, trace=0)
+mdshyb
+
+svhyb <- sv[rownames(volhyb),]
+svhyb$Population <- as.factor(svhyb$Population)
+#svhyb$DN <- factor(ifelse(svhyb$Stop > 55000, "Night", "Day"))
+hybplants <- paste(svhyb$Population, svhyb$Plant, sep="-")
+hybplantsi <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, sep="-")
+hybparents <- paste(svhyb$Population, svhyb$Plant, sep="-")
+hybparents[nchar(hybparents)>9]<-1:sum(nchar(hybparents)>9)
+svhyb$Inflo[is.na(svhyb$Inflo)]<-1:sum(is.na(svhyb$Inflo))
+svhyb$Diurnal[is.na(svhyb$Diurnal)]<-1:sum(is.na(svhyb$Diurnal))
+hybplantsdn <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Diurnal, sep="-")
+hybplantsinflo <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Inflo, sep="-")
+
+par(mar=c(0,0,0,0), bg="white", mfrow=c(1,1))
+ophyb <- ordiplot(mdshyb, type="n")
+
+#points(ophyb, what="species", col="grey80", select=sapply(volhyb, max)>0.01, pch=4, cex=sqrt(sapply(volhyb, max))/100)
+ordicross <- ordihull(mdshyb, groups = as.factor(hybplants), col="black", lwd=4) #Same cross or parental genotype 
+ordihybparents <- ordihull(mdshyb, groups = as.factor(hybparents), col="gray40", lwd=4) #Same parental genotype
+ordihull(mdshyb, groups = as.factor(hybplantsi), col="white", lwd=4)#same individual 
+ordihull(mdshyb, groups = as.factor(hybplantsdn), col="black", lwd=1)#same inflo day/night 
+ordihull(mdshyb, groups = as.factor(hybplantsinflo), col="yellow", lwd=4)# same inflo, same time 
+
+points(ophyb, what="sites", col=hybcol[as.integer(svhyb$Population)], pch=ifelse(svhyb$DN  =="Day",17,19),cex=sqrt(rowSums(volhyb))/300000+0.5)
+ophyb <- ordiplot(mdshyb, type="n")
+points(ophyb, what="sites", col=hybcolg[as.integer(svhyb$Population)], pch=ifelse(svhyb$StartSunset < -1.5,4,18),cex=1.2)
+
+
+text(ophyb, what="sites", labels=round(svhyb$StartSunset,1), col=hybcolg[as.integer(svhyb$Population)], cex=0.7)
+
+text(ophyb, what="species", cex=0.5)
+
+text(ophyb, what="sites", labels=svhyb$Sample, col=hybcolg[as.integer(svhyb$Population)])
+
+
+library(RColorBrewer)
+range01 <- function(x){(x-min(x))/(max(x)-min(x))}
+points(ophyb, what="sites", col=colorRampPalette(brewer.pal(11,"Spectral"))(100)[round(100*range01(svhyb$StartSunset))], pch=as.integer(as.factor(hybcolg[as.integer(svhyb$Population)])))
+
+legend("bottomright",legend=levels(as.factor(paste(svhyb$Population,svhyb$Species))), fill=hybcol, cex=0.8, text.col="black")
+
+
+ordihull(mdshyb, groups = svhyb$Population, col=hybcol, lwd=2)# same population
+```
+
+
+```{r daynight}
+summary(lm(rowSums(volhyb)~svhyb$Stop))
+plot(rowSums(volhyb)~svhyb$Stop)
+day <- svhyb$Sample[svhyb$DN =="Day" & svhyb$Diurnal == "D"]
+night <- sapply(1:length(day), function(x){ svhyb$Sample[svhyb$DN == "Night" & hybplantsdn==hybplantsdn[svhyb$Sample==day[x]]][1]})
+#svhyb$Sample[svhyb$Start > 55000 & hybplantsdn %in% hybplantsdn[svhyb$Sample %in% day]]
+
+
+cmpd <- c("(Z)-hex-3-en-1-ol", "benzaldehyde", "oct-1-en-3-ol", "unknown benzenoid", "2-phenylacetaldehyde", "α-phellandrene","linalool oxide (pyranoid) ketone","linalool oxide (pyranoid)","linalool oxide (furanoid)")
+cmpd <-"oct-1-en-3-ol"
+for(i in 1:length(cmpd)) {
+qp <- qplot(svhyb$StartSunset,sqrt(fvolhyb[,cmpd[i]]), color=specp, xlab="Sunset offset (h)", ylab=cmpd[i]) + geom_smooth(se=F, span=0.8, method="loess") + scale_color_manual(values=specscol, name="Species") + theme_gray(base_size = 12)
+print(qp)
+}
+paste("sqrt",cmpd[i],"per open flower")
+
+#interesting correlations between octenol and hexenol (also try octan-3-one and switching to fvolhyb)
+qplot( svolhyb[,"(Z)-hex-3-en-1-ol"], svolhyb[,"oct-1-en-3-ol"],color=specp, shape=svhyb$DN, linetype=svhyb$DN)  + geom_smooth(se=F, method="lm") + scale_color_manual(values=specscol, name="Species") + geom_point(size=2) + theme_minimal() + scale_shape_discrete("Time") + scale_linetype_discrete("Time of day") + ggtitle("Comparing relative amounts")
+ggsave("oct_vs_hex_relative.pdf", width=6, height=7, device=cairo_pdf)
+
+qplot( fvolhyb[,"(Z)-hex-3-en-1-ol"], fvolhyb[,"oct-1-en-3-ol"],color=specp, shape=svhyb$DN, linetype=svhyb$DN)  + geom_smooth(se=F, method="lm") + scale_color_manual(values=specscol, name="Species") + geom_point(size=2) + theme_minimal() + scale_shape_discrete("Time") + scale_linetype_discrete("Time of day") + ggtitle("Comparing absolute amounts") +scale_x_sqrt() + scale_y_sqrt()
+ggsave("oct_vs_hex_absolute.pdf", width=6, height=7, device=cairo_pdf)
+
+
+day.Abundance <- svhyb$Abundance[svhyb$Sample %in% day]
+night.Abundance <- svhyb$Abundance[svhyb$Sample %in% night]
+dn <- data.frame(day,night, day.time=as.integer(svhyb$Start[svhyb$Sample %in% day]), night.time=as.integer(svhyb$Start[svhyb$Sample %in% night]), day.Abundance, night.Abundance, stringsAsFactors=F)
+t.test(dn$day.Abundance, dn$night.Abundance, paired=T)
+plot(dn$day.Abundance, dn$night.Abundance, ylab="Emissions, Night", xlab="Emissions, Day", col=hybcol[svhyb$Population[svhyb$Sample %in% day]], pch=19, main="Same inflorescence Day/Night")
+abline(a=0,b=1)
+hist(dn$night.Abundance-dn$day.Abundance)
+
+par(mar=c(6,0,0,0))
+srt <- match(c(rbind(dn$day, dn$night)), svhyb$Sample)
+bp <- barplot(t(as.matrix(volhyb[srt,])), col=ccolhyb, border=NA, names.arg=paste(specp,svhyb$Population)[srt], col.axis="black", cex.names=0.8, axes=FALSE, las=2)
+points(x=bp, y=rep(-5000, length(bp)), xpd=T, pch=ifelse(svhyb$DN == "Day",1,19)[srt])
+abline(v=bp[c(F,T)]+bp[1], xpd=T)
+
+hyb$RawAbundance <- rowSums(volhyb)
+ggplot(svhyb, aes(y=RawAbundance, x=StartSunset, color=specp)) + geom_point() + geom_smooth()
+```
+
+```{r pcoa}
+#PCoA = MMDS
+mdshyb <- cmdscale(vegdist(volhyb, method="bray"))
+summary(mdshyb)
+plot(mdshyb, col=hybcol[as.integer(as.factor(svhyb$Population))], pch=16)
+```
+
+
+```{r multtests}
+
+library(BiodiversityR)
+nested.npmanova(volhybn~specpn+Population, data=svhybn)
+
+exclude <-  specpn == "KAHO"
+volparn <- volhybn[!exclude,]; specparn <- factor(specpn[!exclude]); svparn <- svhybn[!exclude,]
+
+
+#PERMANOVA
+#do this by blocks or plots - use are restricted permutation scheme
+adonis(volparn~specparn, permutations=999)
+adonis(volhybn~specpn, permutations=999)
+adonis(volhybn[specpn %in% c("KAAL","KAHO"),]~specpn[specpn %in% c("KAAL","KAHO")], permutations=999)
+adonis(volhybn[specpn %in% c("HOOK","KAHO"),]~specpn[specpn %in% c("HOOK","KAHO")], permutations=999)
+adonis(volhybn[specpn %in% c("KAHO"),]~svhybn$Population[specpn %in% c("KAHO")], permutations=999) #no differencet between cross directions in blend of absolute emission rates (p=0.11)
+adonis(svolhybn[specpn %in% c("KAHO"),]~svhybn$Population[specpn %in% c("KAHO")], permutations=999) #no differencet between cross directions in scent composition (p=0.54)
+adonis(volhybn~specpn+svhybn$Population, permutations=999)
+adonis(volhybn~specpn+svhybn$Population+hybplantsin, permutations=999)
+adonis(volhybn~specpn+svhybn$Population+hybplantsin+hybplantsinflon, permutations=999)
+
+adonis(volhyb~specp*svhyb$DN, permutations=999)
+
+
+
+#ANOSIM - PERMANOVA is more robust!!
+anos <- anosim(volhybn, specpn, permutations=999)
+anos
+anospar <- anosim(volparn, specparn, permutations=999)
+anospar
+summary(anospar)
+plot(anospar)
+
+#SIMPER - same caveats!!
+simp <- simper(volhybn, specpn, permutations=99)
+simppar <- simper(volparn, specparn, permutations=99)
+simppardf <- summary(simppar, ordered=T)
+View(simppardf)
+
+#TODO: try betadisper
+bdn <- betadisper(vegdist(svolhybn, method="bray"), group=specpn)
+bdn
+plot(bdn)
+ordirgl(bdn, col=specpn)
+anova(bdn)
+scores(bdn)
+TukeyHSD(bdn)
+boxplot(bdn)
+permutest(bdn, permutations=999)
+
+ordirgl(betadisper(vegdist(volhybn),svhybn$Population), col=hybcol[svhybn$Population])
+
+#partition variance between components: populations, day night, etc
+#unbiased, compared to adonis which takes them sequentially
+#does NOT work with nested factors! turn back!! TODO 
+vpn <- varpart(vegdist(volhybn),~specpn,~svhybn$Population,~hybplantsin,~hybplantsinflon)
+plot(vpn, Xnames=c("Type","Population", "Plant", "Inflor."), id.size=1)
+showvarparts(4)
+#prc()
+
+vp <- varpart(vegdist(volhyb),~specp,~svhyb$Population,~hybplantsi,~hybplantsinflo)
+plot(vp, Xnames=c("Type","Population", "Plant", "Inflo"), id.size=1)
+showvarparts(4)
+
+```
+
+```{r pca}
+#volhyb <- fvol[f,]
+#volhyb <- volhyb[,colSums(volhyb)>10000]
+#volhyb <- volhyb[,colSums(volhyb>0)>4]#keep at >4, >12 for lda, cda
+#volhyb <- sqrt(volhyb)
+#volhyb <- log10(volhyb+1)
+
+#zerocols <- colSums(volpar)==0; volpar <- volpar[,!zerocols]; volhyb <- volhyb[,!zerocols]
+#fratio <- rep(NA,ncol(volpar))
+#exclude variables with low F ratios, as in Bischoff et al 2013
+#for(i in 1:ncol(volpar)) {
+#  fratio[i] <- summary(aov(volpar[,i]~specpar))[[1]][["F value"]][[1]]
+#}
+#volpar <- volpar[,fratio > 3]; volhyb <- volhyb[,fratio > 3]
+#minimum <- colSums(volpar)>cutlow; volpar <- volpar[,minimum]; volhyb <- volhyb[,minimum]
+
+#rownames(volhyb) <- paste(svhyb$Species, svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Sample, sep="-")
+
+#[order(as.integer(svhyb$Population)),]
+
+minsamp <- 4
+cutoff <- 4000
+volhyb <- fvol[f,]
+volhyb <- volhyb[,colSums(volhyb>0) >= minsamp]
+volhyb <- volhyb[,colSums(volhyb) > cutoff]
+dim(volhyb)
+pavolhyb <- volhyb
+pavolhyb[pavolhyb>0] <- 1
+volpar <- volhyb[!exclude,]; specpar <- factor(specp[!exclude])
+
+#MANOVA
+summary(manova(as.matrix(volpar) ~ specpar))
+
+#volhybo <- volhyb[order(as.integer(svhyb$Population)),]
+
+library(ggvegan)
+#PCA - use rda without groupings
+pcahyb <- rda(volhyb)
+pcahyb
+biplot(pcahyb)
+plot(pcahyb)
+
+#PCA with prcomp
+pcahyb <- prcomp(decostand(sqrt(volhyb), method="tot"), scale=T, center=T)
+plot(pcahyb)
+library(ggbiplot)
+ggbiplot(pcahyb, groups=specp)
+
+```
+
+#CCA 
+```{r cca}
+#need to have less predictors than samples for lda, cda, or use sparse methods
+ccapar <- vegan::cca(sqrt(volparn/svparn$Flrs) ~ specparn)
+ccapar
+
+#vegan::scores(ccapar)
+#plot(eigenvals(ccapar))
+# summary(eigenvals(ccapar))
+# summary(ccapar)
+# screeplot(ccapar)
+# RsquareAdj(ccapar)
+# goodness(ccapar)
+# inertcomp(ccapar)
+# spenvcor(ccapar)
+# intersetcor(ccapar)
+# tolerance(ccapar)
+# vif(ccapar)
+
+anova(ccapar)
+
+plot(ccapar)
+#ordirgl(ccapar)
+
+ccapred <- predict(ccapar, newdata=sqrt(volhybn/svhybn$Flrs), model="CCA", type="wa")
+plot(ccapred~specpn, type='n',border="white")
+points(ccapred~specpn, col=hybcol[svhybn$Population])
+plot(ccapred~svhybn$Population, col=hybcol)
+
+svhybn$ccapred <- ccapred
+
+plot(ccapred~svhybn$SpeciesR, col=hybcolr, ylab="CCA axis", xlab="Cross identity")
+(ccapplot <-   ggplot(svhybn, aes(x=SpeciesR, y=ccapred, fill=SpeciesR))  +  
+    geom_boxplot(width=0.8) + 
+    theme_pubr() + 
+    ylab("CCA axis") + 
+    scale_fill_manual(values=hybcolr)+ guides(fill=F) +
+    scale_x_discrete("Species", labels=(c(expression(italic("S. kaalae")), "K x H", "H x K", expression(italic("S. hookeri"))))))
+ggsave("ccaplot3.png", ccapplot, height=6, width =3.5) 
+
+
+plot(ccapred~svhybn$Population, border="white")
+points(ccapred~svhybn$Population, col=hybcol[svhybn$Population])
+capred <- predict(ccapar, newdata=volhybn, model="CA", type="wa")
+
+ordiplot(ccapar,display="species", ylim=c(-1,1))
+points(capred[,1]~ccapred, col=hybcol[svhybn$Population], pch=19)
+text(y=capred[,1], x=ccapred, labels=svhybn$Sample, col=hybcol[svhybn$Population], pch=19)
+
+plot3d(ccapred, capred[,1], capred[,2], col=hybcol[svhybn$Population], pch=19)
+
+
+```
+#CCADN 
+```{r ccaDN}
+exclude <-  specp == "KAHO"
+volpar <- volhyb[!exclude,]; specpar <- factor(specp[!exclude]); svpar <- svhyb[!exclude,]
+#need to have less predictors than samples for lda, cda, or use sparse methods
+ccapar <- vegan::cca(volpar ~ interaction(factor(specpar),svpar$DN))
+ccapar
+anova(ccapar)
+plot(ccapar, type="n")
+points(ccapar, col=hybcol[svpar$Population], pch=ifelse(svpar$DN=="Day",17,1))
+
+```
+
+#CAP
+```{r cap}
+
+cappar <- capscale(volpar ~ specpar, distance="bray", metaMDSdist = F)
+cappar
+
+plot(cappar)
+
+ordiplot(cappar, type="n")
+points(cappar, col=c("green","red")[specpar], pch=20, cex=2)
+#orditext(cappar)
+ordiplot(cappar, type="text", display=c("sp","wa","cn"))#, select=colSums(volhyb)>110000)
+anova(cappar)
+
+#documentation for predict.rda (also in help for predict.cca)
+#https://github.com/vegandevs/vegan/blob/master/R/predict.rda.R
+#c("response", "wa", "sp", "lc", "working")
+cappred <- predict(cappar, newdata=volhyb, type="working")
+
+#CAP with hybrids  :(
+caphyb <- capscale(volhyb ~ specp, distance="bray", metaMDSdist = F)
+caphyb
+plot(caphyb)
+```
+
+#dbRDA
+```{r dbrda}
+dbrdaparn <- dbrda(volparn ~ specparn, distance="bray", metaMDSdist = F)
+dbrdaparn
+
+rankindex(specparn, volparn, indices =
+c("euclidean", "manhattan", "gower", "bray", "jaccard", "kulczynski"),stepacross=
+FALSE, method = "spearman")
+
+ordiplot(dbrdaparn, type="n")
+points(dbrdaparn, col=c("green","red")[specparn], pch=20, cex=2)
+ordiplot(dbrdaparn, type="points", display=c("sp","wa", "cn"), col="grey80")#, select=colSums(volhyb)>110000)
+anova(dbrdapar)
+
+dbrdapred <- predict(dbrdaparn, newdata=volhyb, type="working")
+dbrdapred
+
+```
+
+#CDA
+```{r cda}
+library(candisc)
+modpar <- lm(as.matrix(volparn) ~ specparn)
+canpar <- candisc(modpar, scores=T)
+print(canpar)
+plot(canpar, conf=0.95)
+#pairs(modpar, fill=TRUE, fill.alpha=.1, var.cex=0.5)
+```
+
+#LDA
+```{r lda}
+ldapar <- lda(volparn[,-c(1,46)], specparn, prior=c(1,1)/2)
+ldapar$svd;
+ldapred <- predict(ldapar, newdata=volhybn[,-c(1,46)])
+par(mar=c(5,4,4,2))
+plot(ldapar)
+plot(ldapred$x~specparn)
+points(ldapred$x~specp)
+text(label=rownames(ldapred$posterior), y=ldapred$x, x=specp)
+#corrplot.mixed(cor(volpar))
+```
+
+#LDADN
+```{r lda}
+range01 <- function(x){(x-min(x))/(max(x)-min(x))}
+timeday <- range01(svpar$StartSunset)
+library(viridisLite)
+sidecols <- viridis(512, direction=-1)[round(timeday*511)+1]
+
+ldapar <- lda(volpar, interaction(specpar,svpar$DN), prior=c(1,1,1,1)/4)
+ldapar$svd;
+ldapred <- predict(ldapar, newdata=volpar)
+par(mar=c(5,4,4,2))
+plot(ldapred$x, col=sidecols, pch=as.integer(specpar)+15, cex=3)
+points(ldapred$x~specpar)
+text(label=rownames(ldapred$posterior), y=ldapred$x, x=specp)
+#corrplot.mixed(cor(volpar))
+```
+
+#RDA
+```{r rda}
+rdaparn <- rda(volparn~specparn)
+rdaparn
+```
+
+
+#Random Forests
+```{r rf}
+
+set.seed(1)
+vsrf <- varSelRF(volpar, specpar, ntree = 5000, ntreeIterat = 2000, vars.drop.frac = 0.2, c.sd=1)
+vsrf
+plot(vsrf)
+#use bootnumber=200
+vsrfb <- varSelRFBoot(volpar, specpar, bootnumber = 2,  srf = vsrf, usingCluster = F)
+vsrfb
+summary(vsrfb)
+plot(vsrfb)
+
+vsrf.dn <- varSelRF(volpar, interaction(specpar,svpar$DN), ntree = 5000, ntreeIterat = 2000, vars.drop.frac = 0.2, c.sd=1)
+vsrf.dn
+plot(vsrf.dn)
+
+```
+
+#PCA
+```{r kaho_pca, warning=FALSE}
+pr <- prcomp(fvol[spec %in% kaho,])
+plot(pr, type="l")
+#summary(pr)
+biplot(pr)
+```
+
+```{r capro, eval=FALSE}
+#Only works when long <- samp
+
+plot(rowSums(fvol)[f]~vCaprolactam[f], col=specp)
+plot(rowSums(vol)[f]~sv$Flrs[f], col=specp)
+
+summary(lm(rowSums(fvol)[f]~specp+vCaprolactam[f]))
+summary(lm((rowSums(vol)[f])~specp+sv$Flrs[f]+vCaprolactam[f]))
+
+summary(lm(rowSums(vol)~spec+vCaprolactam+sv$Flrs))
+```
+

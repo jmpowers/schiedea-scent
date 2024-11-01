@@ -35,15 +35,15 @@ source("read_shimadzu.R")
 # sch.data <- read.shimadzu("../Schiedea/schiedea190801.txt")
 # sch.data2 <- read.shimadzu("../Schiedea/Schiedea_190814.txt")
 # sch.data <- bind_rows(sch.data, sch.data2)
-# save(sch.data, file="data/schiedea_190801_190814.Rdata")
+# save(sch.data, file="data/RMBL_GCMS/schiedea_190801_190814.Rdata")
 # batches.212223 <- c("PG_VF_210826.txt", "PG_Ihyb_220806_1.txt", "Ihyb_SCH_230822b.txt",
 #                     "Ihyb_SCH_230823a.txt", "Ihyb_SCH_230823b.txt", "PFOL_SCH_230822a.txt","SCH_230829a.txt")
 # sch.data.212223 <- "../RMBL Batches/" %>% paste0(batches.212223) %>% set_names(batches.212223) %>%
 #   map_dfr(read.shimadzu, .id="batch") 
-# save(sch.data.212223, file="data/schiedea_212223.Rdata")
-load("data/schiedea_212223.Rdata")
+# save(sch.data.212223, file="data/RMBL_GCMS/schiedea_212223.Rdata")
+load("data/RMBL_GCMS/schiedea_212223.Rdata")
 sch.data.212223 %>% count(batch, Filename) %>% filter(str_detect(Filename, "SCH"))
-load("data/schiedea_190801_190814.Rdata")
+load("data/RMBL_GCMS/schiedea_190801_190814.Rdata")
 sch.data <- bind_rows(sch.data, sch.data.212223)
 
 sch.all <- dcast(sch.data, Filename~Name, sum, value.var="Area")
@@ -60,7 +60,7 @@ isblank <- grepl("Blank|Bakeout", rownames(sch.cut))#if original FileName says b
 table(km$cluster, isblank)
 kblank <- km$cluster == which.max(table(km$cluster, isblank)[,2])
 
-load("data/markes_sequence230908_2023.rda") #2023 only
+load("data/RMBL_GCMS/markes_sequence230908_2023.rda") #2023 only
 sequ.summary.23 <- sequ.file %>% 
   select(c(sequence.start, Desorb.Start.Time, CreationTime, eithertime, status, Tube, markes_n,
            GC_n, either_n, markes_GC, create_desorb,  FileName, user, FullName, id, fuzzy_n)) %>% #columns needed for annotating verdicts
@@ -68,8 +68,8 @@ sequ.summary.23 <- sequ.file %>%
   mutate(desorb.Start.diff = c(NA, diff(Desorb.Start.Time)))
 
 # load("../Inventory/markes_sequence.rda") #through 2022, from markes_sequence.R
-# save(sequ.summary, file="data/sequ_summary221006.rda")
-load("data/sequ_summary221006.rda") #2022 and earlier
+# save(sequ.summary, file="data/RMBL_GCMS/sequ_summary221006.rda")
+load("data/RMBL_GCMS/sequ_summary221006.rda") #2022 and earlier
 sequ.summary <- bind_rows(sequ.summary, sequ.summary.23)
 
 Powers <- grepl("Powers RMBL Data", sequ.summary$FullName, fixed=T) | grepl("SCH_", sequ.summary$FileName, fixed=T)
@@ -83,10 +83,10 @@ sch.km <- data.frame(FileName=row.names(sch.cut),
 schgc <- cbind(schgc, sch.km[,-1])
 rownames(schgc) <- 1:nrow(schgc)
 
-notebook <- read.delim("data/leak_notebook.csv")
+notebook <- read.delim("data/RMBL_GCMS/leak_notebook.csv")
 schgc <- cbind(schgc, notebook[match(schgc$vial, as.integer(as.character(notebook$Vial)), incomparables=NA),-4])
 schgc$TubeMatch <- schgc$Tube == schgc$SteelTube
-write.csv(schgc, "data/schiedea_all230908.csv")
+write.csv(schgc, "data/RMBL_GCMS/schiedea_all230908.csv")
 
 with(sch.km, table(kBlank, nameBlank))
 ```
@@ -102,7 +102,7 @@ points(pca.sch.cut, display="sites", col=ifelse(kblank, "black", rainbow(k)[km$c
 #match up with metadata
 #sampl <-gs_title("Schiedea Volatiles Sampling")
 #sampl <- "1DhjN1O3tvAwG1NnCp9oUSEVxoNKgQyperArin2zbsFY"
-sampl <- "data/Schiedea Volatiles Sampling - Samples.tsv"
+sampl <- "data/RMBL_GCMS/Schiedea Volatiles Sampling - Samples.tsv"
 s <- read_tsv(sampl, col_types = cols(.default = col_character(),
                                      Flow = col_double(),
                                      Mass = col_double(),
@@ -131,7 +131,7 @@ setdiff(setdiff(setdiff(s.nr$Vial, schgc$vial2), broken), notrun)
 #library(googlesheets4)
 #rmbl <- gs_title("Schiedea RMBL GC-MS Inventory")
 #schgc.verdict <- read_sheet("1_rNiQ3IwKIKQhfxZTBJbKU14ed6L1rGQpe7e_ttJl6Y", na="NA", guess_max=2000)
-schgc.verdict19 <- read_tsv("data/Schiedea RMBL GC-MS Inventory - schiedea_all.tsv") %>% 
+schgc.verdict19 <- read_tsv("data/RMBL_GCMS/Schiedea RMBL GC-MS Inventory - schiedea_all.tsv") %>% 
   mutate(across(all_of(c("sequence.start", "Desorb.Start.Time", "CreationTime", "eithertime")), ymd_hms),
          create_desorb = duration(create_desorb),
          ApproxDate = as.character(ApproxDate)) %>% 
