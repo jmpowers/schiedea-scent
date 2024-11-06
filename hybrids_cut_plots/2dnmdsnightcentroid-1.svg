@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' class='svglite' width='504.00pt' height='360.00pt' viewBox='0 0 504.00 360.00'>
+<defs>
+  <style type='text/css'><![CDATA[
+    .svglite line, .svglite polyline, .svglite polygon, .svglite path, .svglite rect, .svglite circle {
+      fill: none;
+      stroke: #000000;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-miterlimit: 10.00;
+    }
+    .svglite text {
+      white-space: pre;
+    }
+  ]]></style>
+</defs>
+<rect width='100%' height='100%' style='stroke: none; fill: #FFFFFF;'/>
+<defs>
+  <clipPath id='cpMC4wMHw1MDQuMDB8MC4wMHwzNjAuMDA='>
+    <rect x='0.00' y='0.00' width='504.00' height='360.00' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpMC4wMHw1MDQuMDB8MC4wMHwzNjAuMDA=)'>
+</g>
+<defs>
+  <clipPath id='cpMC4wMHw1MDQuMDB8Ni41N3wzNTMuNDM='>
+    <rect x='0.00' y='6.57' width='504.00' height='346.85' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpMC4wMHw1MDQuMDB8Ni41N3wzNTMuNDM=)'>
+<rect x='-0.000000000000064' y='6.57' width='504.00' height='346.85' style='stroke-width: 1.16; stroke: #FFFFFF; fill: #FFFFFF;' />
+</g>
+<g clip-path='url(#cpMC4wMHw1MDQuMDB8MC4wMHwzNjAuMDA=)'>
+</g>
+<defs>
+  <clipPath id='cpNDkuMDJ8NDk4LjAyfDEyLjU1fDMxNi41OQ=='>
+    <rect x='49.02' y='12.55' width='449.00' height='304.04' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpNDkuMDJ8NDk4LjAyfDEyLjU1fDMxNi41OQ==)'>
+<rect x='49.02' y='12.55' width='449.00' height='304.04' style='stroke-width: 1.16; stroke: none; fill: #FFFFFF;' />
+</g>
+<g clip-path='url(#cpMC4wMHw1MDQuMDB8MC4wMHwzNjAuMDA=)'>
+<polyline points='49.02,316.59 49.02,12.55 ' style='stroke-width: 1.07; stroke-linecap: butt;' />
+<text x='43.64' y='282.96' text-anchor='end' style='font-size: 12.00px; font-family: "Arial";'>-0.5</text>
+<text x='43.64' y='204.22' text-anchor='end' style='font-size: 12.00px; font-family: "Arial";'>0.0</text>
+<text x='43.64' y='125.49' text-anchor='end' style='font-size: 12.00px; font-family: "Arial";'>0.5</text>
+<text x='43.64' y='46.76' text-anchor='end' style='font-size: 12.00px; font-family: "Arial";'>1.0</text>
+<polyline points='46.03,278.58 49.02,278.58 ' style='stroke-width: 1.16; stroke: #333333; stroke-linecap: butt;' />
+<polyline points='46.03,199.85 49.02,199.85 ' style='stroke-width: 1.16; stroke: #333333; stroke-linecap: butt;' />
+<polyline points='46.03,121.12 49.02,121.12 ' style='stroke-width: 1.16; stroke: #333333; stroke-linecap: butt;' />
+<polyline points='46.03,42.38 49.02,42.38 ' style='stroke-width: 1.16; stroke: #333333; stroke-linecap: butt;' />
+<polyline points='49.02,316.59 498.02,316.59 ' style='stroke-width: 1.07; stroke-linecap: butt;' />
+<polyline points='112.78,319.58 112.78,316.59 ' style='stroke-width: 1.16; stroke: #333333; stroke-linecap: butt;' />
+<polyline points='191.51,319.58 191.51,316.59 ' style='stroke-width: 1.16; stroke: #333333; stroke-linecap: butt;' />
+<polyline points='270.24,319.58 270.24,316.59 ' style='stroke-width: 1.16; stroke: #333333; stroke-linecap: butt;' />
+<polyline points='348.98,319.58 348.98,316.59 ' style='stroke-width: 1.16; stroke: #333333; stroke-linecap: butt;' />
+<polyline points='427.71,319.58 427.71,316.59 ' style='stroke-width: 1.16; stroke: #333333; stroke-linecap: butt;' />
+<text x='112.78' y='330.72' text-anchor='middle' style='font-size: 12.00px; font-family: "Arial";'>-1.0</text>
+<text x='191.51' y='330.72' text-anchor='middle' style='font-size: 12.00px; font-family: "Arial";'>-0.5</text>
+<text x='270.24' y='330.72' text-anchor='middle' style='font-size: 12.00px; font-family: "Arial";'>0.0</text>
+<text x='348.98' y='330.72' text-anchor='middle' style='font-size: 12.00px; font-family: "Arial";'>0.5</text>
+<text x='427.71' y='330.72' text-anchor='middle' style='font-size: 12.00px; font-family: "Arial";'>1.0</text>
+<text x='273.52' y='344.95' text-anchor='middle' style='font-size: 12.00px; font-family: "Arial";'>NMDS1</text>
+<text transform='translate(14.73,164.57) rotate(-90)' text-anchor='middle' style='font-size: 12.00px; font-family: "Arial";'>NMDS2</text>
+</g>
+</svg>

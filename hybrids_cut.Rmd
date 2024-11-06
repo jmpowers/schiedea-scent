@@ -1,0 +1,1050 @@
+---
+title: "Schiedea Hybrid Scent"
+author: "[John Powers](http://sites.uci.edu/powers/)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    self_contained: no
+    lib_dir: libs
+    code_folding: hide
+    toc: yes
+    toc_float: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+<style type="text/css">
+.main-container { max-width: 1600px; margin-left: 0; margin-right: auto; }
+img{ max-width:200%; height: auto; }
+td, th { padding : 6px }
+</style>
+
+```{r setup, include=FALSE}
+#params <- {}; params$cutoff <- 0 #20000
+#source("sdata2.R", local=T)
+library(RColorBrewer)
+library(knitr)
+library(plyr); library(dplyr)
+select <- dplyr::select
+library(reshape2)
+library(vegan)
+library(ggplot2)
+#load("./rdata/sdata3.Rdata")
+load("./data/UCI_GCMS/sdata3_hexoct.Rdata")
+knitr::opts_chunk$set(comment="", cache=T, warning = F, message = F, 
+                      fig.path = "hybrids_cut_plots/", dev="svglite", dev.args=list(fix_text_size=FALSE))
+#knit_hooks$set(webgl = hook_webgl) #setupKnitr() #old way with webgl=TRUE in each chunk
+colMax <- function(data) sapply(data, max, na.rm = TRUE)
+colMin <- function(data) sapply(data, min, na.rm = TRUE)
+rowMax <- function(data) apply(base::as.matrix(data), 1, max)
+divmax <- function(x) { sweep(x, 2, apply(x, 2, max)+0.000000001, "/") }
+range01 <- function(x){(x-min(x))/(max(x)-min(x))}
+time2frac <- function(x) { (hour(x)+minute(x)/60+second(x)/3600) /24 }
+time2dec <- function(x) { (hour(x)+minute(x)/60+second(x)/3600) }
+scientific_10 <- function(x) {
+parse(text=ifelse(x==0, "0", gsub(fixed=T, "e+", " %*% 10^", scales::scientific_format(digits=1,nsmall=1)(x+1e-15)))) 
+}
+```
+
+S. kaalae, S. hookeri, and hybrids
+
+#Sample Inventory
+By plant population (pure species) or type of cross:
+```{r sv}
+eve <- -2.5 #hours before sunset
+
+specs <- kaho <- c("HOOK", "KAAL","KAHO")
+#191216 turned off excluding resamples - now averaging them with code
+#TODO: some red flags in the Notes column - possible wrong IDs
+#resamples <- c("282","070","069","238","079","080","144","181","176","175") # see svdup_diel.ods, selected to maximize remaining variation in sunset time. does not filter out KAHO duplicates yet.
+#updated with resamples excluded: cappar2 anova table, 
+f <- spec %in% specs #& !(sv$Sample %in% resamples)
+speca <- replace(spec, sv$Population == "KK", "KAAL"); speca <- replace(speca, sv$Population == "HH", "HOOK")
+specp <- factor(speca[f], levels=c("HOOK","KAHO","KAAL"))#REORDER
+specscol <- c("green","black","red")
+
+#"3587WP" "879WKG" "881KHV" "892WKG" "904WPG" "HH"     "HK"     "KH"     "KK"     "WK"  
+hybpopsp <- c("K", "H", "K", "K", "K", "HH", "HK", "KH", "KK", "H")
+hybcol <- c("red","green","red","red","red","darkgreen","blue","orange","magenta", "green")
+
+kahomp <- data.frame(Plant=as.character(sv[sv$Species == "kaho","Plant"]), stringsAsFactors = F)
+kahomp <- colsplit(string=kahomp$Plant, pattern=" x ", names=c("Maternal", "Paternal"))
+kahopops <- c("879WKG", "WK","3587WP","892WKG","904WPG")
+kahomp <- as.data.frame(apply(kahomp, c(1,2), function(x) strsplit(x, "-")[[1]][1]))
+kahomp <- lapply(kahomp, mapvalues, from = c("794","866","891","899","879","892","904","3587"), to = c("WK","WK","WK","WK","879WKG","892WKG","904WPG","3587WP"))
+kahomp <- lapply(kahomp, factor, levels=kahopops)
+sv$Population2 <- sv$Population
+sv[sv$Species == "kaho",]$Population2 <- ifelse(kahomp$Maternal==kahomp$Paternal, as.character(kahomp$Maternal), "Interpop")
+sv$Population2 <- factor(sv$Population2)
+sv$ftot <- rowSums(vol)/sv$Flrs
+sv$SpeciesR <- ifelse(speca=="KAHO",as.character(sv$Population),as.character(speca)) 
+sv$SpeciesR <- factor(sv$SpeciesR, levels=c("KAAL","KH","HK","HOOK"))
+levels(sv$SpeciesR) <- c("S. kaalae", "K x H", "H x K", "S. hookeri")
+hybcolr <- setNames(c(brewer.pal(3,"Greens")[3],brewer.pal(9,"Oranges")[5], brewer.pal(9,"Set1")[7], brewer.pal(3,"Purples")[3]),levels(sv$SpeciesR))
+sv$Individual <- with(sv, factor(paste(Species, Population, Plant, Cutting)))
+
+volhyb <- vol[f,]
+volhyb <- volhyb[order(as.integer(specp)),]
+specp <- sort(specp)
+svhyb <- sv[rownames(volhyb),]
+volhyb <- volhyb[order(as.integer(specp), svhyb$Population),]
+volhyb <- volhyb[,colSums(volhyb)>0]
+pavolhyb <- volhyb
+pavolhyb[pavolhyb>0] <-1
+svolhyb <- decostand(volhyb, "total")
+
+#new consolidated svhyb and svhybn code
+svhyb <- sv[rownames(volhyb),]
+fvolhyb <- volhyb / svhyb$Flrs
+svhyb$Population <- as.factor(svhyb$Population)
+#svhyb$DN <- factor(ifelse(svhyb$Start > 59400, "Night", "Day"))
+#svhyb$DN <- factor(ifelse(svhyb$Stop > 55000, "Night", "Day"))
+svhyb$DN <- factor(ifelse(svhyb$StartSunset > eve, "Night", "Day"))
+svhyb$Inflo[is.na(svhyb$Inflo)]<-1:sum(is.na(svhyb$Inflo))
+svhyb$Diurnal[is.na(svhyb$Diurnal)]<-1:sum(is.na(svhyb$Diurnal))
+svhyb$plants  <- hybplants  <- paste(svhyb$Population, svhyb$Plant, sep="-")
+svhyb$plantsi <- hybplantsi <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, sep="-")
+svhyb$parents <- hybplants
+svhyb$parents[grepl(" x ", hybplants, fixed=T)]<-1:sum(grepl(" x ", hybplants, fixed=T))#only group by parents, set the crosses to an integer sequence to force them not to group
+hybparents <- svhyb$parents
+svhyb$Inflo[is.na(svhyb$Inflo)]<-1:sum(is.na(svhyb$Inflo))
+svhyb$Diurnal[is.na(svhyb$Diurnal)]<-1:sum(is.na(svhyb$Diurnal))
+svhyb$plantsdn <- hybplantsdn <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Diurnal, sep="-")
+svhyb$plantsinflo <- hybplantsinflo <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Inflo, sep="-")
+svhyb$plantsinflodate <- hybplantsinflodate <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Inflo, svhyb$SampleDate, sep="-")
+
+volhybn <- volhyb[svhyb$DN == "Night",]
+specpn <- specp[svhyb$DN == "Night"]
+svolhybn <- decostand(volhybn, "total")
+
+svhybn <- svhyb[svhyb$DN == "Night",]
+fvolhybn <- volhybn / svhybn$Flrs
+specpd <- svhybn$SpeciesR
+#svhybn <- sv[rownames(volhybn),]
+#svhybn$Population <- as.factor(svhybn$Population)
+#svhybn$DN <- factor(ifelse(svhybn$StartSunset > eve, "Night", "Day"))
+hybplantsn <- svhybn$plants #paste(svhybn$Population, svhybn$Plant, sep="-")
+hybplantsin <- svhybn$plantsi #paste(svhybn$Population, svhybn$Plant, svhybn$Cutting, sep="-")
+hybparentsn <- svhybn$parents #paste(svhybn$Population, svhybn$Plant, sep="-")
+#hybparentsn[nchar(hybparentsn)>9]<-1:sum(nchar(hybparentsn)>9)
+#svhybn$Inflo[is.na(svhybn$Inflo)]<-1:sum(is.na(svhybn$Inflo))
+#svhybn$Diurnal[is.na(svhybn$Diurnal)]<-1:sum(is.na(svhybn$Diurnal))
+hybplantsdnn <- svhybn$plantsdn #paste(svhybn$Population, svhybn$Plant, svhybn$Cutting, svhybn$Diurnal, sep="-")
+hybplantsinflon <- svhybn$plantsinflo #paste(svhybn$Population, svhybn$Plant, svhybn$Cutting, svhybn$Inflo, sep="-")
+hybplantsinflodaten <- svhybn$plantsinflodate #paste(svhybn$Population, svhybn$Plant, svhybn$Cutting, svhybn$Inflo, svhybn$SampleDate, sep="-")
+
+
+
+```
+
+```{r inventory}
+inventory <- data.frame(row.names=levels(svhyb$Population), Cross=hybpopsp, Color=hybcol,Samples=as.vector(table(svhyb$Population)))[order(hybpopsp), ]
+kable(inventory)
+
+summary(as.numeric(as.difftime(format.POSIXct(svhyb$SampleDateStart[svhyb$DN=="Night"], tz="GMT+8", format="%H:%M"),format="%H:%M")))#convert PDT to PST when needed
+
+#TODO no svpar
+# summary(as.numeric(as.difftime(format.POSIXct(svpar$SampleDateStart[svpar$DN=="Night"], tz="GMT+8", format="%H:%M"),format="%H:%M")))
+
+summary(as.numeric(svhyb$StartSunset[svhyb$DN=="Night"]))
+summary(as.numeric(svhyb$StartNoon[svhyb$DN=="Day"]))
+```
+
+
+Just the evening crosses samples (not plants!):
+```{r crosses}
+kahomp <- data.frame(Plant=svhyb[svhyb$Species == "kaho" & svhyb$StartSunset > eve,"Plant"])#line differs from above - just evening
+kahomp <- reshape2::colsplit(string=kahomp$Plant, pattern=" x ", names=c("Maternal", "Paternal"))
+kahopops <- c("879WKG", "WK","3587WP","892WKG","904WPG")
+kahomp <- as.data.frame(apply(kahomp, c(1,2), function(x) strsplit(x, "-")[[1]][1]))
+kahomp <- lapply(kahomp, mapvalues, from = c("794","866","891","899","879","892","904","3587"), to = c("WK","WK","WK","WK","879WKG","892WKG","904WPG","3587WP"))
+kahomp <- lapply(kahomp, factor, levels=kahopops)
+tkahomp <- table(kahomp)
+t(lower.tri(tkahomp)*tkahomp)+tkahomp*upper.tri(tkahomp, diag=T)
+mtkahomp <- 6-tkahomp
+mtkahomp <- as.data.frame(mtkahomp)
+
+#crosses and parent samples (not plants) added on diagonal in the evening:
+(inventory.cross <- tkahomp+diag(table(svhyb$Population[svhyb$StartSunset > eve])[rownames(tkahomp)]))
+write.csv(inventory.cross, "output/hybrids/inventory_cross_parents.csv")
+#remember to add the 4 881KHV samples (not used to make crosses since from the Ko'olaus)
+#there are also two samples without populations (HH and KH)
+
+#how many maternal and paternal parent plants?
+library(dplyr)
+library(tidyr)
+mp <- sv %>% filter(Species =="kaho") %>% select(Plant) %>% mutate(Plant=as.character(Plant)) %>%
+  separate(Plant, sep=" x ", into = c("Maternal", "Paternal")) %>% 
+  separate(Maternal, sep="-", into = c("MomPop", "MomPlant"), remove=F, extra="merge") %>% 
+  separate(Paternal, sep="-", into = c("DadPop", "DadPlant"), remove=F, extra="merge")
+
+mp %>% group_by(MomPop) %>% summarize(moms=n_distinct(MomPlant))
+mp %>% group_by(DadPop) %>% summarize(moms=n_distinct(DadPlant))
+```
+
+Some plants were used for more than one sample - day/night or on the same inflorescence:
+```{r duplicates}
+kable(cbind(Plants=table(specp[!duplicated(cbind(specp,hybplantsi))]), table(data.frame(specp,Diurnal=svhyb$DN))))
+
+kable(cbind(Plants=table(svhybn$SpeciesR[!duplicated(cbind(svhybn$SpeciesR,hybplantsin))]), table(data.frame(svhybn$SpeciesR,Diurnal=svhybn$DN))))
+
+svhybn  %>% group_by(Individual) %>% filter(n()>1) %>% ungroup() %>% #find duplicates
+  dplyr::select(SampleDate, Individual, ftot, Leaves:Flrs) %>% arrange(Individual, SampleDate)
+svhybn %>% select(Individual, Inflo, SampleDate, Notes) %>% group_by(Individual) %>% filter(n()>1) %>% arrange(Individual, SampleDate) %>% distinct(Individual) %>% nrow  #%>% print(n=Inf)
+
+table(svhyb$Population[!duplicated(cbind(specp,hybplantsi))])
+```
+
+Evening crosses plants (not samples)
+```{r crosses_plants}
+svhybn.plants <- svhybn %>% group_by(Species, SpeciesR, Population, Plant, Cutting, Individual) %>% summarize_at(vars(ftot), mean)
+
+kahomp.plants <- data.frame(Plant=svhybn.plants[svhybn.plants$Species == "kaho","Plant"])
+kahomp.plants <- colsplit(string=kahomp.plants$Plant, pattern=" x ", names=c("Maternal", "Paternal"))
+kahomp.plants <- as.data.frame(apply(kahomp.plants, c(1,2), function(x) strsplit(x, "-")[[1]][1]))
+kahomp.plants <- lapply(kahomp.plants, mapvalues, from = c("794","866","891","899","879","892","904","3587"), to = c("WK","WK","WK","WK","879WKG","892WKG","904WPG","3587WP"))
+kahomp.plants <- lapply(kahomp.plants, factor, levels=kahopops)
+tkahomp.plants <- table(kahomp.plants)
+
+
+write.csv(tkahomp.plants, "output/hybrids/inventory_cross_plants.csv")
+#remember to add the 3 881KHV plants (not used to make crosses since from the Ko'olaus)
+#add to the diagonal these parent plants:
+table(svhybn.plants$Population)[rownames(tkahomp)]
+#there are also two plants from crosses without populations (HH and KH) - added these to 879x879 and 892xWK in the inventory
+```
+
+
+#Flowers per inflorescence
+Biased high due to selecting large fresh inflorescences. Includes open flowers only.
+```{r fperi}
+#species
+flr <- with(sv, data.frame(Flrs,Closed,Buds))
+
+#df <- gather(flr, key=Filename, specpn)
+#colnames(df) <- c("Filename", "specpn")
+#ggplot(svhybn, aes(x=specpn, y=value, fill=var))
+
+flrpca <- prcomp(flr,center=T,scale=T)
+library(ggbiplot)
+ggbiplot(flrpca, obs.scale = 1, var.scale = 1, groups = spec, labels=sv$Sample, ellipse = TRUE)
+
+library(beanplot)
+beanplot(svhybn$Closed/as.numeric(svhybn$Inflor)~specpn, main="Closed flowers per inflorescence")
+
+
+with(svhybn, plot(Fphase~Closed, col=specpn))
+
+#kaho
+flrhyb <- with(svhyb, data.frame(Mphase,Fphase,Closed,Buds))
+flrhybn <- flrhyb[svhyb$DN=="Night",]
+flrhybpca <- prcomp(log(flrhybn/svhybn$Inflor+1),center=T,scale=T)
+ggbiplot(flrhybpca, obs.scale = 1, var.scale = 1, groups = specpn, ellipse = T, alpha=1, varname.size=4) + ggtitle("PCA of log flower counts per inflorescence") + scale_color_manual(values=c(3,1,2))
+#labels=apply(flrhybn,1,paste,collapse=":")
+#labels=round(svhybn$Flrs/svhybn$Inflor)
+#groups=svhybn$Population
+
+library(PerformanceAnalytics)
+chart.Correlation(log(flrhybn/svhybn$Inflor+1), histogram=T, pch=19, col=specpn, lwd=2)
+
+library("GGally")
+ggpairs(flrhybn)
+
+ord <- order(specpn,svhybn$Population,rowSums(flrhybn))
+barplot(t(as.matrix(cbind(svhybn$Mphase,svhybn$Fphase,svhybn$Closed,svhybn$Buds)[ord,])), col=rev(c(3,6,2,4)), border=NA, names.arg=paste(specpn,svhybn$Population)[ord], col.axis="black", cex.names=0.8, axes=T, las=2, ylab="All flower types per inflorescence sampled")
+legend("topleft",legend=rev(c("Male phase","Female phase", "Closed", "Buds")), fill=c(3,6,2,4))
+
+
+flrcomp <- metaMDS(flrhyb, autotransform=F, trace=0)
+ordiplot(flrcomp, type="n")
+points(flrcomp, col=specp)
+
+adonis(decostand(flrhyb, method="total")~specp, permutations=999)
+
+library(ade4)
+par(mfrow=c(2,2))
+for(i in 1:3) {
+  flr.vol <- mantel.rtest(vegdist(volhybn[specpn==specs[i],]), dist(flrhybn[specpn==specs[i],]), nrepet = 999)
+plot(vegdist(volhybn[specpn==specs[i],])~vegdist(flrhybn[specpn==specs[i],]), main=specs[i], 
+     sub=paste("Mantel R=", round(flr.vol$obs,3)," p=",flr.vol$pvalue),
+     xlab="Inflorescence Euclid dist", ylab="Scent Bray dist", 
+     col=alpha(4-i,0.4), xlim=c(0,0.8), ylim=c(0,1))
+}
+
+library(ade4)
+flr.vol <- mantel.rtest(vegdist(volhyb), vegdist(flrhyb), nrepet = 999)
+print(flr.vol)
+plot(flr.vol)
+```
+
+```{r fcompscomp, eval=FALSE}
+plot(svhyb$Flrs~svhyb$Closed, col=specp)
+plot(log(svhyb$Flrs/(svhyb$Closed+1)) ~ specp)
+summary(lm(log(svpar$Flrs/(svpar$Closed+1)) ~ specpar))
+
+infloagen <- log10(flrhybn$Closed/flrhybn$Fphase)
+with(log(flrhybn+1), plot(mdshybn$points[,2]~(Mphase/Fphase/Buds/Closed), col=specp))
+
+fit <- lm(as.matrix(volhybn) ~ as.matrix(flrhybn))
+fit <- lm(as.matrix(mdshybn$points) ~ as.matrix(flrhybn))
+summary(fit)
+
+flrcap <- capscale(svolhybn[specpn=="HOOK",]~., data=log(flrhybn[specpn=="HOOK",]+1))
+flrcap <- vegan::rda(svolhybn[specpn=="KAAL",]~., data=log(flrhybn[specpn=="KAAL",]+1))
+flrcap <- vegan::rda(svolhybn[specpn=="KAHO",]~., data=log(flrhybn[specpn=="KAHO",]+1))
+flrcap
+anova(flrcap)
+
+flrrda <- vegan::rda(svolhybn[specpn=="HOOK",]~., data=log(flrhybn[specpn=="HOOK",]+1))
+flrrda <- vegan::rda(svolhybn[specpn=="KAAL",]~., data=log(flrhybn[specpn=="KAAL",]+1))
+flrrda <- vegan::rda(svolhybn[specpn=="KAHO",]~., data=log(flrhybn[specpn=="KAHO",]+1))
+flrrda
+anova(flrrda)
+
+flrcca <- vegan::cca(fvolhybn[specpn=="HOOK",]~., data=log(flrhybn[specpn=="HOOK",]+1))
+flrcca <- vegan::cca(fvolhybn[specpn=="KAAL",]~., data=log(flrhybn[specpn=="KAAL",]+1))
+flrcca <- vegan::cca(fvolhybn[specpn=="KAHO",]~., data=log(flrhybn[specpn=="KAHO",]+1))
+flrcca
+plot(flrcca)
+vegan:::summary.cca(flrcca)
+anova(flrcca)
+anova(flrcca, by="term")
+anova(flrcca, by="mar")
+anova(flrcca, by="axis")
+```
+
+#Table of volatiles
+```{r tabsvol}
+#####    Need to use sdata3_hexoct.Rdata to make this table - includes octenol and hexenol
+
+### from 2dnmdspar######
+minsamp <- 2
+cutoff <- 0 #400000
+volhyb.cut <- volhyb[,colSums(volhyb>0) >= minsamp]
+volhyb.cut <- volhyb.cut[,colSums(volhyb.cut) > cutoff]
+
+exclude <-  specp == "KAHO"
+volpar <- volhyb.cut[!exclude,]; specpar <- factor(specp[!exclude]); svpar <- svhyb[!exclude,];
+parplantsdn <- paste(svpar$Population, svpar$Plant, svpar$Cutting, svpar$Diurnal, sep="-")
+hybplantsdn <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, svhyb$Diurnal, sep="-")
+dim(volpar)
+volparn <- volpar[svpar$StartSunset > eve,]
+svparn <- svpar[svpar$StartSunset > eve,]
+svparn.hist <- hist(as.numeric(svparn$StartSunset), breaks=3)
+svolparn <- decostand(volpar[svpar$StartSunset > eve,], "total")
+specparn <- specpar[svpar$StartSunset > eve]
+
+svdup <- svpar[duplicated(paste(svpar$Individual, svpar$DN)) | duplicated(paste(svpar$Individual, svpar$DN), fromLast=TRUE),]
+svdup_diel <- svpar[duplicated(svpar$Individual) | duplicated(svpar$Individual, fromLast=TRUE),]
+#dbls <- svolhyb[,is.na(match(colnames(svolhyb), chems$Name))]
+#for(i in 1:ncol(dbls)) { 
+#svolhyb[,substr(colnames(dbls)[i], 1, nchar(colnames(dbls)[i])-2)] <- svolhyb[,substr(colnames(dbls)[i], 1, nchar(colnames(dbls)[i])-2)]  + dbls[,i] }
+#svolhyb[,colnames(dbls)] <- NULL
+
+svolhyb.mean <- aggregate(. ~ specp, svolhyb, mean)[,-1]
+rownames(svolhyb.mean) <- levels(specp)
+# library(SortableHTMLTables)
+# sortable.html.table(cbind(colnames(svolhyb.mean),as.data.frame(t(round(svolhyb.mean, 3)))), "svolhyb3.html")
+tsvolhyb.mean <- as.data.frame(t(svolhyb.mean))
+tsvolhyb.chems <- cbind(tsvolhyb.mean, chems[match(rownames(tsvolhyb.mean), chems$Name),])
+write.table(tsvolhyb.chems, file="output/hybrids/tsvolhybchems3.csv", sep="\t", row.names=F)
+
+
+volhybn.mean <- aggregate(. ~ specpn, volhybn, function(x) mean(x[x>0]))[,-1] #nonzero only !!!
+rownames(volhybn.mean) <- levels(specpn)
+tvolhybn.mean <- as.data.frame(t(volhybn.mean))
+
+#TODO move this to sdata3
+chems.pc.class <- read.table("data/UCI_GCMS/chemspc3_classes.csv", sep="\t", header=T)
+multipliers <- read.table("data/UCI_GCMS/multipliers.csv", header=T, sep="\t")
+ngvolhyb <- volhyb * multipliers$ngPerArea[match(chems.pc.class$Class,multipliers$Class)][col(volhyb)]
+ngvolhybn <- volhybn * multipliers$ngPerArea[match(chems.pc.class$Class,multipliers$Class)][col(volhybn)]
+ngfvolhyb <- ngvolhyb / svhyb$Flrs
+ngfvolhybn <- ngvolhybn / svhybn$Flrs
+svhybn$ngftot <- rowSums(ngvolhybn)/svhybn$Flrs
+ngfvolhybn.mean <- aggregate(. ~ specpn, ngfvolhybn, function(x) mean(x[x>0]))[,-1] #nonzero only !!!
+rownames(ngfvolhybn.mean) <- levels(specpn)
+tngfvolhybn.mean <- as.data.frame(t(ngfvolhybn.mean))
+
+volhybn.prop <- aggregate(. ~ specpn, volhybn, function(x) sum(x>0)/length(x))[,-1]
+rownames(volhybn.prop) <- levels(specpn)
+tvolhybn.prop <- as.data.frame(t(volhybn.prop))
+
+tvolhybn.chems <- cbind(tvolhybn.mean, tngfvolhybn.mean, tvolhybn.prop, chems.pc[match(rownames(tvolhybn.mean), chems.pc$Name),])
+write.table(tvolhybn.chems, file="output/hybrids/tvolhybnchems3_evening.csv", sep="\t", row.names=T, col.names = NA)
+
+aggregate(rowSums(ngfvolhyb), list(svhyb$SpeciesR,svhyb$DN), function(x) c(mean(x), sd(x)))
+
+#for svolparn
+#dbls <- svolparn[,is.na(match(colnames(svolparn), chems$Name))]
+#for(i in 1:ncol(dbls)) { 
+#svolparn[,substr(colnames(dbls)[i], 1, nchar(colnames(dbls)[i])-2)] <- svolparn[,substr(colnames(dbls)[i], 1, nchar(colnames(dbls)[i])-2)]  + dbls[,i] }
+#svolparn[,colnames(dbls)] <- NULL
+
+svolparn.mean <- aggregate(. ~ specparn, svolparn, mean)[,-1]
+rownames(svolparn.mean) <- levels(specparn)
+#library(SortableHTMLTables)
+#sortable.html.table(cbind(colnames(svolparn.mean),as.data.frame(t(round(svolparn.mean, 3)))), "svolparn3.html")
+tsvolparn.mean <- as.data.frame(t(svolparn.mean))
+tsvolparn.chems <- cbind(tsvolparn.mean, chems[match(rownames(tsvolparn.mean), chems$Name),])
+write.table(tsvolparn.chems, file="output/hybrids/tsvolparnchems3.csv", sep="\t",  row.names=F)
+```
+
+```{r dryad}
+library(tidyverse)
+#prep GC data for Dryad
+ngvolpar <- volpar * multipliers$ngPerArea[match(chems.pc.class$Class,multipliers$Class)][col(volpar)]
+
+svpar %>% select(Filename, SpeciesR, Population2, plantsi, Leaves, Inflor, Mphase, Fphase, Closed, Buds, Temp, StartSunset) %>% dplyr::rename(Species = SpeciesR, Population = Population2, Plant = plantsi, Bracts = Leaves) %>% 
+  mutate(StartSunset = round(as.numeric(StartSunset), 2),
+         Temp = as.integer(Temp),
+         Plant=as.integer(factor(Plant)),
+         Species = str_replace(as.character(Species), "S.", "Schiedea"),
+         Population = replace_na(Population, "Interpop")) %>%
+  arrange(Species, Population, Plant, Bracts, Inflor, Mphase, Fphase, Closed, Buds) %>% 
+  left_join(ngvolpar %>% rownames_to_column("Filename") %>% mutate_if(is.numeric, round, 2)) %>% #volpar has peak areas / hr (not normalized by number of flowers)
+  select(-Filename) %>% 
+  write_csv("output/hybrids/Schiedea_GCMS.csv") %>% str
+```
+
+
+#Total Emissions
+```{r te_figure}
+#convert these to emission rate (ng/flr/hr) #done - need to run command for svhybn$ngftot
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+
+svhybn.plants <- svhybn %>% group_by(SpeciesR, Individual) %>% summarize_at(vars(ngftot), mean)
+
+(ftot.medians <- svhybn.plants %>% group_by(SpeciesR) %>% summarize_at("ngftot", list( n=length, ngftot=median)) %>% mutate (tukey=c("a","a","a","a")))# was "a","b","b","b" for ftot
+
+  (teplot <-   ggplot(svhybn, aes(x=SpeciesR, y=ngftot, fill=SpeciesR))  +  
+    #geom_hline(yintercept=exp(mean(log(ftot.means$ftot[c(1,4)]))))  + #geometric mean of arithmetic means
+    #geom_violin() + 
+    geom_boxplot()+
+    geom_text(aes(label=tukey, y=110), data=ftot.medians)+ #for ftot was 2e7
+    geom_text(aes(label=paste("n =",n), y=1), data=ftot.medians)+ #for ftot was 3e4
+    scale_y_log10() + #labels=scientific_10
+    theme_pubr() + 
+    ylab(expression("Volatile emissions (ng/flower/hr)")) + 
+    scale_fill_manual(values=hybcolr) +guides(fill="none")+
+    scale_x_discrete("Species", labels=(c(expression(italic("S. kaalae")), "K x H", "H x K", expression(italic("S. hookeri"))))))
+ggsave("output/hybrids/teplot_ng_yesoct_yeshex.png", teplot, height=5, width =4, type="cairo") 
+ggsave("output/hybrids/teplot_ng_yesoct_yeshex.pdf", teplot, height=5, width =4, device=cairo_pdf) 
+```
+
+```{r te_model}
+#go down and run ngftot line first
+lm.ftot <- lm(ngftot~SpeciesR, data=svhybn) #got rid of log10 so this is testing the arithmetic mean now
+library(multcomp)
+lm.ftot %>% glht(linfct = mcp(SpeciesR=c("`H x K` - 0.5 * `S. kaalae` - 0.5 * `S. hookeri`== 0",
+                                         "`K x H` - 0.5 * `S. kaalae` - 0.5 * `S. hookeri`== 0"))) %>% 
+  summary() #test if hybrids are different from arithmetic average of two species
+lm.ftot %>% glht(linfct = mcp(SpeciesR="Tukey")) %>% summary #pairwise comparisons
+
+library(emmeans)
+em.ftot <- emmeans(lm.ftot, "SpeciesR") %>% regrid #regrid put is back on untransformed scale
+pairs(em.ftot)
+cld(em.ftot)
+plot(em.ftot)
+```
+
+
+```{r te_misc}
+beanplot(log10(rowSums(vol[f,]))~specp, main="Log Total Emissions")
+beanplot(log10(rowSums(volhybn)/svhybn$Flrs)~specpn, main="Log Emissions per Flower", log="")
+beanplot(log10(ftot)~SpeciesR, data=svhybn, main="Log Emissions per Flower", log="")
+
+#library(ggbeeswarm) #geom_beeswarm(cex=2.8, size=2) +
+  
+plot(log10(rowSums(volhybn)/svhybn$Flrs)~specpn, main="Log Emissions per Flower")
+
+tapply((rowSums(volparn)/svparn$Flrs), specparn, mean)
+plot(log10(rowSums(volparn)/svparn$Flrs)~specparn)
+wilcox.test((rowSums(volparn)/svparn$Flrs)~specparn)
+tapply(log10(rowSums(volparn)/svparn$Flrs),specparn,mean)
+
+plot((log10(rowSums(volparn))~specparn))
+wilcox.test((rowSums(volparn))~specparn)
+tapply(rowSums(volparn),specparn,mean)
+
+#for manuscript
+wilcox.test((rowSums(volparn[,colnames(volparn) !="(Z)-hex-3-en-1-ol"]/svparn$Flrs))~specparn)
+
+aov.te <- aov(rowSums(volhybn)/svhybn$Flrs~specpn)
+aov.te <- aov(rowSums(fvol[f,])~specp)
+anova(aov.te)
+TukeyHSD(aov.te, ordered=TRUE)
+
+#Ratio of night and day
+aggregate((rowSums(volpar)/svpar$Flrs), list(svpar$SpeciesR,svpar$DN), mean)
+```
+
+```{r eperf}
+plot(rowSums(vol[f,])~sv$Flrs[f], col=specscol[specp], ylab="Total Emissions",xlab="Number of Flowers", main="Emissions ~ Flowers")
+legend("topright",legend=levels(specp), fill=specscol)
+summary(lm(rowSums(vol[f,])~specp+sv$Flrs[f]))
+qplot(sv$Flrs[f],rowSums(vol[f,]), col=specp, ylab="Total Emissions",xlab="Number of Flowers", main="Emissions ~ Flowers") +geom_smooth(se=F)
+```
+
+
+# Rarity-abundance
+```{r rarity}
+#write.table(data.frame(index=1:ncol(fvolhybn), max=log10(apply(fvolhybn,2,max)), mean=log10(apply(fvolhybn,2,function(x){mean(x[x>0])}))),"rarity.csv", sep="\t", row.names=T)
+ccol.g <- as.character(read.delim("data/UCI_GCMS/rarity.csv")$color)#convert to CAS!
+ccol.g[ccol.g==""] <- "#888888"
+ccol.g <- "#888888"##REVERT
+set.seed(2)
+ccolhyb <- sample(rainbow(length(volhyb)))
+  
+rarity <- function(choice, makeplot=TRUE) {
+fvolhybn1 <- fvolhybn[specpn==choice, ]
+pavolhybn1 <- volhybn[specpn==choice, ]
+pavolhybn1[pavolhybn1>0] <-1
+
+x <- colSums(pavolhybn1/nrow(pavolhybn1))
+y <- apply(fvolhybn1,2,max)
+size <- apply(fvolhybn1,2,function(x){mean(x[x>0])})
+if(makeplot) {
+plot(log10(y)~x, cex=ifelse(log10(size)>2, (log10(size)-1.9)*3, 0.3), col=alpha(ccol.g,0.7), pch=19, main=paste("Maximum abundance vs. occurence for ",choice),sub="Circles sized by log mean nonzero abundance per flower",xlab="Fraction of samples",ylab="log maximum abundance per flower")
+labels <- sapply(colnames(volhyb), function(y) paste(strwrap(y, 60), collapse = "\n"))
+text(x,log10(y),labels=ifelse(sqrt(x^2+5*log10(y)^2)>7,labels, NA), xpd=T, cex=0.6)
+}
+return(data.frame(species = choice, prop = x, max = y, avg = size))
+}
+png("output/hybrids/rarity_KAAL3.png", height=2000, width=2000)
+par(cex=3.5)
+rarity("KAAL")
+dev.off()
+png("output/hybrids/rarity_KAHO3.png", height=2000, width=2000)
+par(cex=3.5)
+rarity("KAHO")
+dev.off()
+png("output/hybrids/rarity_HOOK3.png", height=2000, width=2000)
+par(cex=3.5)
+rarity("HOOK")
+dev.off()
+
+rarity.df <- rbind(rarity("HOOK"), rarity("KAAL"))
+rarity.df$Name <- row.names(rarity.df)
+
+ggplot(rarity.df, aes(x=Name, y=avg, fill=species)) + geom_col() + coord_flip()
+
+sv.fvolhyb <- cbind(svhyb, fvolhyb)
+sv.fvolhyb.long <- gather(sv.fvolhyb, Name, Area, 56:ncol(sv.fvolhyb))
+
+spectimecol <- c(brewer.pal(3,"Purples")[2], brewer.pal(3,"Purples")[3], brewer.pal(3,"Greens")[2], brewer.pal(3,"Greens")[3])
+(spectimeplot <- ggplot(filter(sv.fvolhyb.long, 
+              SpeciesR %in% c("S. hookeri", "S. kaalae"), 
+              Name %in% names(volpar[,colSums(volpar) > 4000000])), aes(Name, as.numeric(Area), color=paste(SpeciesR, DN))) + 
+  geom_boxplot(position=position_dodge(width=1)) + 
+  coord_flip() + scale_y_sqrt("Peak area per flower", expand=expansion(mult=c(0, 0.05))) +
+  scale_color_manual("Species and Time", values=spectimecol) + 
+  theme_minimal())
+ggsave("output/hybrids/spectime.pdf", spectimeplot, height=8, width=12, units="in", device=cairo_pdf)
+       
+x <- sapply(1:3, function(choice) {colSums(pavolhyb[specp==specs[choice],])/table(specp)[choice]})
+y <- sapply(1:3, function(choice) {log10(sapply(volhyb[specp==specs[choice],], max))})
+size <- sapply(1:3, function(choice) {log10(sapply(volhyb[specp==specs[choice],], function(x){mean(x[x>0])}))})
+plot(1, type="n", ylim=c(3,9), xlim=c(0,1), ylab="Maximum Relative Amount", xlab="Proportion of Samples")
+arrows(x[,1], y[,1], x[,3], y[,3], length=0.01, col=ccol, lty=2)
+arrows(x[,2], y[,2], x[,3], y[,3], length=0.01, col=ccol)
+p<-3
+points(y[,p]~x[,p], cex=ifelse(size[,p]>2, (size[,p]-1.9)*3, 0.3), col=alpha(ccol,0.4), xpd=T)
+text(x[,p], y[,p]-0.1, ifelse(x[,p]>0.2,names(x[,p]),""),xpd=T,cex=0.7)
+
+par(bg="grey20", col.axis="white", col.lab="white")
+x <- sapply(1:3, function(choice) {colMeans(svolhybn[specpn==specs[choice],])})
+plot(c(1,1,1)~factor(levels(specp), levels=levels(specp)), type="n", ylim=c(0,0.5), xlim=c(0.9,3.1), ylab="Average relative emission rate", xlab="")
+arrows(1, x[,1], 2, x[,3], length=0.01, col=ccolhyb, lwd=2)
+arrows(3, x[,2], 2, x[,3], length=0.01, col=ccolhyb, lwd=2)
+p<-3
+#points(x[,p]~2, cex=ifelse(size[,p]>2, (size[,p]-1.9)*3, 0.3), col=ccol, xpd=T)
+text(2, x[,p]+0.01, ifelse(x[,p]>0.05,names(x[,p]),""),xpd=T,cex=0.7, col=ccolhyb)
+p <- 1
+text(1, x[,p]+0.01, ifelse(x[,p]>0.05,names(x[,p]),""),xpd=T,cex=0.7, col=ccolhyb)
+p <- 2
+text(3, x[,p]+0.01, ifelse(x[,p]>0.05,names(x[,p]),""),xpd=T,cex=0.7, col=ccolhyb)
+```
+
+#Venn Diagram
+```{r venn, eval=FALSE}
+## Don't run this - changes volhyb!!!
+minsamp <- 3
+cutoff <- 2000
+#volhyb <- fvol[f,]
+volhyb <- volhyb[,colSums(volhyb>0) >= minsamp]
+volhyb <- volhyb[,colSums(volhyb) > cutoff]
+dim(volhyb)
+pavolhyb <- volhyb
+pavolhyb[pavolhyb>0] <- 1
+
+set.seed(2)
+ccolhyb <- sample(rainbow(length(volhyb)))
+
+plot(sort(colSums(pavolhyb)/dim(pavolhyb)[1]), ylab="Occurence", main="Filtered Compound rarity")
+
+venn <- aggregate(pavolhyb, by=list(specp), FUN=max)
+rownames(venn) <- venn[,1]
+venn[,1] <- NULL
+library(limma)
+vennDiagram(t(as.matrix(venn)), circle.col=specscol)
+
+##meanhyb <- aggregate(volhyb, by=list(specp), FUN=mean)
+```
+
+#Compounds Diversity
+```{r diversity}
+library(beanplot)
+library(vegan)
+
+#Number of compounds
+beanplot(rowSums(pavolhyb)~specp, las=2, log="", main="Number of compounds")
+anova(lm(rowSums(pavolhyb)~specp))
+
+svhybn$num_compounds <- rowSums(pavolhyb[svhyb$DN=="Night",])
+(ncplot <-   ggplot(svhybn, aes(x=SpeciesR, y=num_compounds, fill=SpeciesR))  +  
+    geom_boxplot()+    theme_pubr() + 
+    ylab(expression("Number of compounds")) + 
+    scale_fill_manual(values=hybcolr) +guides(fill="none")+
+    scale_x_discrete("Species", labels=(c(expression(italic("S. kaalae")), "K x H", "H x K", expression(italic("S. hookeri"))))))
+
+#Shannon diversity
+beanplot(diversity(volhybn, index="shannon")~specpn, main="Shannon diversity index")
+aggregate(diversity(volhybn, index="shannon"), list(specpn), mean)
+aggregate(diversity(volhybn, index="shannon"), list(specpn), function(x) c(mean(x),sd(x)))
+
+svhybn$shannon <- diversity(volhybn, index="shannon")
+(shannon_plot <-   ggplot(svhybn, aes(x=SpeciesR, y=shannon, fill=SpeciesR))  +  
+    geom_boxplot()+    theme_pubr() + 
+    ylab(expression("Shannon diversity index")) + 
+    scale_fill_manual("Species", values=hybcolr) +guides(fill="none")+
+    scale_x_discrete("Species", labels=(c(expression(italic("S. kaalae")), "K x H", "H x K", expression(italic("S. hookeri"))))))
+
+library(gridExtra)
+grid.arrange(teplot, ncplot, shannon_plot, nrow=1)
+
+#Big diversity plot
+library(multcomp)
+svhybn.long <- svhybn %>% dplyr::select(SpeciesR, ngftot, num_compounds, shannon) %>% pivot_longer(-one_of("SpeciesR"))
+diversity_vars <- list("ngftot", "num_compounds", "shannon")
+tukeys <- sapply(setNames(paste(diversity_vars, ' ~ SpeciesR'), diversity_vars), 
+       function(form) lm(form, data = svhybn) %>% glht(linfct = mcp(SpeciesR="Tukey")) %>% cld %>% `$`(mcletters) %>% `$`(Letters)) %>% 
+  as.data.frame %>% tibble::rownames_to_column("SpeciesR") %>% mutate(SpeciesR = factor(SpeciesR, levels=levels(svhybn$SpeciesR))) %>% pivot_longer(-one_of("SpeciesR")) %>% 
+ left_join(svhybn.long  %>%  group_by(name) %>% 
+  summarize(height = max(value) + .3 * sd(value)))
+
+(diversity_plot <-   ggplot(svhybn.long, aes(x=SpeciesR, y=value, fill=SpeciesR))  + 
+    facet_wrap("name", scales="free_y", strip.position = "left", nrow=1,
+               labeller=as_labeller(c(ngftot = "Volatile emissions (ng/flower/hr)", num_compounds="Number of compounds", shannon="Shannon diversity index")))+
+    geom_text(aes(label=value,y=height), data=tukeys)+
+    geom_boxplot()+    theme_pubr() + 
+    scale_fill_manual("Species", values=hybcolr) +
+    labs(y=NULL, x=NULL)+
+    theme(strip.background = element_blank(), strip.placement = "outside", strip.text = element_text(size=12),
+          legend.position = "bottom",
+          axis.text.x=element_blank(), axis.ticks.x=element_blank()))
+ggsave("output/hybrids/diversity_yesoct_yeshex.png", diversity_plot, height=5, width =7, type="cairo") 
+ggsave("output/hybrids/diversity_yesoct_yeshex.pdf", diversity_plot, height=5, width =7, device=cairo_pdf)
+
+hchyb <- hclust(vegdist(t(volhyb)), "aver")
+beanplot(treedive(volhyb, hchyb)~specp, main="Functional Diversity")
+
+beta <- mean(vegdist(volhyb, binary=TRUE))
+beta
+
+raremax <- min(rowSums(round(volhybn)))
+rare <- rarefy(round(volhybn), raremax)
+#TODO:fix this. from intro to vegan ESA 2017
+plot(specnumber(volhybn), rare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
+abline(0,1)
+#rarecurve(round(volhybn), step=20, sample = raremax, col="blue", cex=0.6)
+```
+
+#Heatmap
+```{r heatmap_figure}
+set.seed(1)
+mdshybn1 <- metaMDS(decostand(ngvolhybn, method="hellinger"),k=1,try=200, autotransform=F, trace=0)
+mdshybn1
+
+library(seriation)
+callback = function(hc, mat){
+    sv = svd(t(mat))$v[,1]
+    dend = reorder(as.dendrogram(hc), wts = sv)
+    as.hclust(dend)
+}
+library(dendsort)
+library(pheatmap)
+library(viridis)
+library(grid)
+mincount <- 15
+srt <- order(svhybn$SpeciesR, -mdshybn1$points, decreasing=T)
+rn <- rownames(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount])
+
+###TODO MIGHT BE A BUG HERE see schiedea_gc.R globosa heatmap. annotations are using row.names=rn and matching them up somehow
+#changed to ng/hr
+#cairo_pdf("output/hybrids/hybheatmap4_4_ng.pdf", width=10.5, height=7.6)#10.5, 5.2
+png("output/hybrids/hybheatmap4_4_ng.png", width=10.5, height=7.6, units="in", res=500)
+ph  <- pheatmap(as.matrix(t(ngfvolhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount][srt,]))^(1/3), 
+         cluster_cols=F, show_colnames=F,
+         clustering_method="mcquitty", clustering_distance_rows="correlation",
+         clustering_callback = function(hc, ...){dendsort(hc, type="average")},
+         scale="none", color=inferno(512),
+         annotation_col = data.frame(Species=as.integer(svhyb$SpeciesR[svhyb$DN=="Night"])[srt], row.names=rn), 
+         annotation_colors = list(Species=hybcolr), 
+         gaps_col = which(as.logical(diff(as.integer(svhyb$SpeciesR[svhyb$DN=="Night"])[srt]))),
+   cellwidth = 3.5, cellheight = 14, fontsize = 10, border_color = NA, legend=F, legend_breaks=NA, annotation_legend=F, cutree_rows=5
+)
+grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=c(0.165,0.54),y=0.964, gp=gpar(fontsize=10, col="white", fontface=4))
+grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.317,0.417),y=0.964, gp=gpar(fontsize=10, col="white", fontface=2))
+dev.off()
+```
+
+#Boxplots
+```{r boxplots}
+#changed to ng/hr
+mincount <- 23
+mfvolhyb <- ngfvolhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount]
+mfvolhyb$Species <- svhyb$SpeciesR[svhyb$DN=="Night"]
+library(reshape2)
+meltfvolhyb <- melt(mfvolhyb, id.vars=c("Species"))
+
+#put chemicals in order of NMDS
+set.seed(1)
+mdshybn1 <- metaMDS(decostand(sqrt(ngvolhybn), method="tot"),k=1,try=200, autotransform=F, trace=0)
+mdshybn1
+meltfvolhyb$variable <- reorder(meltfvolhyb$variable, -mdshybn1$species[match(meltfvolhyb$variable, row.names(mdshybn1$species))])
+levels(meltfvolhyb$variable)[match(c("(3E)-4,8-dimethylnona-1,3,7-triene",
+                                     "2,2,6-trimethylcyclohexane-1,4-dione",
+                                     "4-hydroxy-2,6,6-trimethyl-3-oxocyclohexene-1-carbaldehyde") , levels(meltfvolhyb$variable)) ] <- c("DMNT",                       "2,2,6-trimethylcyclohexane-\n1,4-dione",
+                                     "4-hydroxy-2,6,6-trimethyl-\n3-oxocyclohexene-\n1-carbaldehyde")
+
+ggplot(meltfvolhyb) + geom_boxplot(aes(x=Species, y=value, color=Species),  outlier.size=1) + 
+  facet_wrap(vars(variable), scales="free_y", ncol=4, labeller = labeller(variable = label_wrap_gen(18))) +
+  scale_color_manual(values=hybcolr) +
+  scale_y_sqrt("Emission rate (ng/flower/hr)") + theme_minimal() + #, labels=scientific_10
+  theme(axis.text.x=element_blank(), axis.title.x=element_blank(), panel.grid.major.x=element_blank(), legend.position = "top")
+ggsave("output/hybrids/hyb_boxplots_ng.pdf", device=cairo_pdf, width=9, height=12)
+ggsave("output/hybrids/hyb_boxplots_ng.png", width=9, height=12)
+
+library(broom)
+halfway <- meltfvolhyb %>% filter(Species %in% c("S. hookeri", "S. kaalae")) %>% 
+  group_by(Species, variable) %>% summarize(specmean = mean(value)) %>% 
+  group_by(variable) %>% summarize(parentmean = mean(specmean))
+test.halfway <- meltfvolhyb %>% filter(!Species %in% c("S. hookeri", "S. kaalae")) %>% #just hybrids
+  dplyr::select(-Species) %>%  group_by(variable) %>% nest() %>% 
+  left_join(halfway) %>% 
+  mutate(model = map2(data, parentmean, 
+                      function(dat, testagainst) tidy(t.test(pull(dat, value), mu=testagainst)))) %>% 
+  dplyr::select(-data) %>% unnest(model)
+
+ggplot(meltfvolhyb) +  geom_boxplot(aes(x=Species, y=value, color=Species),  outlier.size=1) + 
+  facet_wrap(vars(variable), scales="free_y", ncol=4, labeller = labeller(variable = label_wrap_gen(18))) +
+  geom_text(data=test.halfway, aes(x=2.5, y=0, label=if_else(p.value <0.05, as.character(round(estimate, 2)), "")))+
+  geom_pointrange(data=test.halfway, aes(x=2.3, y=estimate, ymin=conf.low, ymax=conf.high))+
+  geom_point(data=test.halfway, aes(x=2.7, y=parentmean, color="blue"))+
+  scale_color_manual(values=hybcolr) +
+  scale_y_sqrt("Emission rate (ng/flower/hr)") + theme_minimal() + #, labels=scientific_10
+  theme(axis.text.x=element_blank(), axis.title.x=element_blank(), panel.grid.major.x=element_blank(), legend.position = "top")
+```
+
+
+```{r heatmap_misc}
+
+library(RColorBrewer)
+my_palette <- colorRampPalette(c("white", "darkblue"))(n=999)
+#my_palette <- brewer.pal(9, "YlOrRd")
+heatmap(log10(as.matrix(volhyb[,colSums(volhyb)>10000])+1),Rowv=specp,Colv=sort(rowSums(volhyb)), RowSideColors=hybcol[as.integer(svhyb$Population)], margins=c(18,4), scale="none", col=my_palette)
+
+hybcolg <- c("red","green","red","red","red","green","blue","orange","red", "green")
+heatmap(log10(as.matrix(volhyb[,colSums(pavolhyb)>10][order(specp, svhyb$Population),])+1),Rowv=NA,Colv=sort(rowSums(volhyb)), RowSideColors=hybcolg[as.integer(svhyb$Population)][order(specp, svhyb$Population)], margins=c(20,0), scale="none", col=my_palette, labRow=NA)
+
+colMax <- function(data) sapply(data, max, na.rm = TRUE)
+
+heatmap(log10(as.matrix(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>10][order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"]),])+1),Rowv=NA,Colv=sort(rowSums(volhyb[svhyb$DN=="Night",])), RowSideColors=hybcolg[as.integer(svhyb$Population[svhyb$DN=="Night"])][order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"])], margins=c(20,0), scale="none", col=my_palette, labRow=NA, distfun=vegdist)
+# & colMax(volhyb[svhyb$DN=="Night",])>1000
+
+library(gplots)
+my_palette2 <- colorRampPalette(c("white", "darkblue"))
+sep <- diff(as.integer(as.factor(hybcolg[as.integer(svhyb$Population[svhyb$DN=="Night"])][order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"])])))!=0
+
+srt <- order(specpn,svhybn$Population, rowSums(volhybn))
+set.seed(1)
+mdshybn1 <- metaMDS(decostand(sqrt(volhybn), method="tot"),k=1,try=200, autotransform=F, trace=0)
+mdshybn1
+srt <- order(svhybn$SpeciesR, -mdshybn1$points, decreasing=T)
+
+library(viridisLite)
+#order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"])
+mincount <- 10
+png(file = "output/hybrids/hybheatmap3_4.png", bg = "white", width=1600,height=2400) 
+  par(lwd=6)
+hybhm <- heatmap.2(as.matrix(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount][srt,])^(1/3),
+          RowSideColors=hybcolg[as.integer(svhyb$Population[svhyb$DN=="Night"])][srt], 
+          Rowv=F,Colv=order(colMeans(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount])),
+          margins=c(98,0), trace="none", scale="none", col=magma(512), labRow=NA, dendrogram="column", key=F,keysize=0.3,
+          sepcol="white",rowsep=which(sep,T), cexCol=5,
+          distfun=function(x){dist(x)}, 
+          hclustfun=function(x){hclust(x, method="mcquitty")})
+dev.off() #margin 54,0
+#Colv=order(colSums(volhyb[svhyb$DN=="Night",]))
+
+png(file = "output/hybrids/parheatmap4.png", bg = "white", width=800,height=1200)
+heatmap.2(as.matrix(svolhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>10][order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"]),]),
+          RowSideColors=hybcolg[as.integer(svhyb$Population[svhyb$DN=="Night"])][order(specp[svhyb$DN=="Night"], svhyb$Population[svhyb$DN=="Night"])], 
+          Rowv=F,Colv=order(colMeans(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>10])),
+          margins=c(54,0), trace="none", scale="none", col=my_palette2, labRow=NA, dendrogram="column", key=F,keysize=0.3,
+          sepcol="black",rowsep=which(sep,T), cexCol=2, 
+          distfun=function(x){dist(x)}, 
+          hclustfun=function(x){hclust(x, method="mcquitty")})
+dev.off()
+```
+
+#NMDS scree
+```{r scree, eval=FALSE}
+NMDS.scree<-function(x) { #where x is the name of the data frame variable
+plot(rep(1,10),replicate(10,metaMDS(x,autotransform=F,k=1)$stress),xlim=c(1,nrow(x)/10),ylim=c(0,0.5),xlab="# of Dimensions",ylab="Stress",main="NMDS stress plot")
+for (i in 1:(nrow(x)/10-2)) {
+points(rep(i+1,1),replicate(1,metaMDS(x,autotransform=F,k=i+1)$stress))
+}
+}
+NMDS.scree(wisconsin(sqrt(volhyb)))
+```
+
+#NMDS plot
+
+```{r 3dnmds, eval=FALSE}
+set.seed(1)
+mdshyb3 <- metaMDS(volhyb,k=3,try=100, autotransform=T, trace=0)
+mdshyb3
+ordirgl(mdshyb3, col=hybcol[svhyb$Population])
+```
+
+```{r 2dnmdsnight, fig.width=10, fig.asp=0.618}
+set.seed(1)
+mdshybn <- metaMDS(decostand(volhybn, method="hellinger"),k=2,try=200, autotransform=F, trace=0)
+mdshybn
+
+##### Base R plot #####
+#par(mar=c(0,0,0,0), bg="grey20", mfrow=c(1,1))
+png(filename="output/hybrids/hybnmdsnight3_time_lumped.png", height=1200, width=1200)
+par(cex=2)
+ophyb <- ordiplot(mdshybn, type="n", ylim=c(min(mdshybn$points[,2]),max(mdshybn$points[,2])), xlim=c(min(mdshybn$points[,1]),max(mdshybn$points[,1])+0.1))
+#points(ophyb, what="species", col="grey80", select=sapply(volhybn, max)>0.01, pch=4, cex=sqrt(sapply(volhybn, max))/100)
+ordicross <- ordihull(mdshybn, groups = as.factor(hybplantsn), col="gray80", lwd=4) #Same cross or parental genotype 
+ordihybparents <- ordihull(mdshybn, groups = as.factor(hybparentsn), col="gray40", lwd=4) #Same parental genotype
+ordihull(mdshybn, groups = as.factor(hybplantsin), col="black", lwd=4)#same hybplantsiidual 
+#ordihull(mdshybn, groups = as.factor(hybplantsdnn), col="brown", lwd=4)#same inflo day/night 
+ordihull(mdshybn, groups = as.factor(hybplantsinflon), col="red", lwd=4.5)# same inflo, same time 
+#points(ophyb, what="sites", col=hybcol[as.integer(svhybn$Population)], pch=ifelse(svhybn$DN == "Day",17,19),cex=sqrt(rowSums(  volhybn))/300+0.5)
+#hybcolg<- c("red","green","red","red","red","green","blue","orange","red", "green")
+#points(ophyb, what="sites", col=hybcolg[as.integer(svhybn$Population)], pch=ifelse(svhybn$DN == "Day",17,19),cex=1)
+#text(ophyb, what="sites", col=hybcolg[as.integer(svhybn$Population)], labels=svhybn$Cutting, cex=0.7)
+points(ophyb, what="sites", col=hybcolr[as.integer(svhybn$SpeciesR)], pch=19,cex=1)
+legend("topright",legend=levels(svhybn$SpeciesR), fill=hybcolr, cex=1.5, text.col="black")
+text(ophyb, what="species", select = colSums(pavolhyb[svhyb$DN=="Night",])>30, col="magenta", labels=rank(-colSums(pavolhyb[svhyb$DN=="Night",]), ties.method="first"), cex=1.2, font=2)
+#legend("topright",legend=levels(as.factor(paste(svhybn$Population,svhybn$Species))), fill=hybcol, cex=0.8, text.col="black")
+dev.off()
+
+##### 2dnmdsnight ggplot #####
+library(ggpubr)
+library(ggvegan)
+library(ggordiplots)
+library(ggrepel)
+hullcross <- gg_ordiplot(mdshybn, groups = as.factor(hybplantsn), plot=F)$df_hull
+hullparents <- gg_ordiplot(mdshybn, groups = as.factor(hybparentsn), plot=F)$df_hull
+hullplantsi <- gg_ordiplot(mdshybn, groups = as.factor(hybplantsin), plot=F)$df_hull
+hullplantsinflo <- gg_ordiplot(mdshybn, groups = as.factor(hybplantsinflon), plot=F)$df_hull
+hullplantsinflodate <- gg_ordiplot(mdshybn, groups = as.factor(hybplantsinflodaten), plot=F)$df_hull
+
+obj <- fortify(mdshybn)
+obj$Sample <- NA; obj$Sample[obj$score=="sites"] <-  svhybn$Sample
+obj <- obj %>% left_join(svhybn %>% dplyr::select(c(Sample, SpeciesR, plants, parents, plantsi, plantsinflo, plantsinflodate, StartSunset))) %>% mutate(StartSunset = as.numeric(StartSunset))
+obj$occur <- NA; obj$occur[obj$score=="species"] <- colSums(pavolhyb[svhyb$DN=="Night",])
+obj$ftotal <- NA; obj$ftotal[obj$score=="species"] <- colSums(fvolhyb[svhyb$DN=="Night",])
+obj <- obj %>% arrange(NMDS2, NMDS1)
+
+(hybnplot <- ggplot(obj, aes(x=NMDS1, y=NMDS2)) + 
+    geom_path(data=filter(obj, score=="sites"),aes(group=plants, color="cross"), size=1) +
+    geom_path(data=filter(obj, score=="sites"),aes(group=parents, color="parents"), size=1) +
+    geom_path(data=filter(obj, score=="sites"),aes(group=plantsi, color="plantsi"), size=1) +
+    geom_path(data=filter(obj, score=="sites"),aes(group=plantsinflo, color="plantsinflo"), size=1) +
+    geom_path(data=filter(obj, score=="sites"),aes(group=plantsinflodate, color="plantsinflodate"), size=1) +
+  scale_color_manual("",breaks=c("cross","parents","plantsi","plantsinflo","plantsinflodate"), labels=c("Cross","Clone","Plant","Inflorescence","Bag"), values=c(cross="grey90", parents="grey60", plantsi="grey30", plantsinflo=brewer.pal(6,"Set1")[6],plantsinflodate=brewer.pal(6,"Set1")[1],sites="white",species=NA)) +
+      coord_fixed(xlim=range(obj$NMDS1[obj$score=="sites"])+c(-0.2,0.6), 
+                  ylim=range(obj$NMDS2[obj$score=="sites"])) + theme_pubr()+
+    #scale_x_reverse(expand=c(0,0),labels=function(x) -x, breaks=c(-1,-0.5,0,0.5,1)) +
+    scale_x_continuous(expand=c(0,0))+
+    theme(legend.text = element_text(size=13)) + 
+    guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=3))))
+
+(hybplotn.spec <- hybnplot + 
+        scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+  geom_point(data=obj[obj$score=="sites",], aes(fill=SpeciesR), shape=21, size=3, color="white") +
+    geom_text(data=obj[obj$score=="species" & obj$ftotal>1.5e4 & obj$occur>nrow(volhybn)*0.20,], aes(label=label), color="black", size=3.8) ) 
+
+ggsave("output/hybrids/hybnmdsnight3.pdf", hybplotn.spec, height=8, width=10, device=cairo_pdf)
+ggsave("output/hybrids/hybnmdsnight3.png", hybplotn.spec, height=8, width=10)
+
+
+(hybnplot.time <- hybnplot + scale_fill_viridis_c("Time after sunset (h)", direction=-1) + 
+  geom_point(data= obj[obj$score=="sites",], aes(fill=StartSunset), shape=21, size=3, color="white"))
+
+
+(hybnplot.points <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) + 
+  scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+  geom_point(data=obj[obj$score=="sites",], aes(fill=SpeciesR), shape=21, size=4, color="white")+
+     theme_pubr()+theme(legend.text = element_text(size=20)) + xlab("NMDS1")+
+    guides(fill = guide_legend(override.aes = list(size=10))))
+ggsave("output/hybrids/hybnmdsnight3nolines.png", hybnplot.points, height=8, width=10)
+
+(hybnplot <- ggplot(obj, aes(x=NMDS1, y=NMDS2)) + 
+  geom_path(data=hullplantsi, aes(x=x,y=y, group=Group, col="plantsi"), size=1.5, inherit.aes = F) +
+  geom_path(data=hullplantsinflo, aes(x=x,y=y, group=Group, col="plantsinflo"), size=1.5, inherit.aes = F) +
+  geom_path(data=hullplantsinflodate, aes(x=x,y=y, group=Group, col="plantsinflodate"), size=1.5, inherit.aes = F) +
+  scale_color_manual("",breaks=c("cross","parents","plantsi","plantsinflo","plantsinflodate"), labels=c("Cross","Clone","Plant","Inflorescence","Bag"), values=c(cross="grey90", parents="grey70", plantsi="grey70", plantsinflo="grey40",plantsinflodate="grey10",sites="white",species=NA)) +
+      coord_fixed(xlim=range(obj$NMDS1[obj$score=="sites"])+c(-0.1,0.5), ylim=range(obj$NMDS2[obj$score=="sites"])) + theme_pubr()+
+    scale_x_reverse(expand=c(0,0),labels=function(x) -x, breaks=c(-1,-0.5,0,0.5,1)) +
+    theme(legend.text = element_text(size=13)) + 
+    guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=3))))
+
+(hybplotn.spec.notext <- hybnplot + scale_fill_manual("", values=hybcolr, na.translate=F) +
+  geom_point(data=obj[obj$score=="sites",], aes(fill=SpeciesR), shape=21, size=4, color="white") ) 
+
+ggsave("output/hybrids/hybnmdsnight3notext.png", hybplotn.spec.notext, height=7, width=9)
+
+
+#ophyb <- ordiplot(mdshyb, type="n", xlim=c(min(mdshyb$points[,1]),max(mdshyb$points[,1])),ylim=c(min(mdshyb$points[,2]),max(mdshyb$points[,2])))
+#text(ophyb, what="species", col="white", select=sapply(volhyb, max)>0.01, cex=sapply(volhyb, max)/100000)
+#text(ophyb, what="sites", labels=hybplants, col=hybcol[as.integer(svhyb$Population)], cex=0.7)
+#points(ophyb, what="sites", col=hybcol[as.integer(svhyb$Population)], pch=ifelse(svhyb$Start < 55000,1,19),cex=1.5)
+#ordihull(mdshyb, groups = svhyb$Population, col=hybcol, lwd=2)# same population
+#text(ophyb, what="sites", labels=svhyb$Sample, cex=0.7)
+```
+
+
+#Bar chart
+
+```{r barchart}
+mvolhyb <- volhyb
+mvolhyb$specp <- specp
+library(reshape2)
+meltvolhyb <- melt(mvolhyb, id.vars=c("specp"))
+par(mar=c(15,2,1,0))
+plot(log10(meltvolhyb$value+1)~meltvolhyb$variable, border="white", las=2, cex.axis=0.5, cex.lab=0.1, main="log compound amount per flower")
+points(log10(meltvolhyb$value+1)~meltvolhyb$variable, col=meltvolhyb$specp)
+
+par(mar=c(5,0,0,0), mfrow=c(2,1))
+srt <- order(specp, svhyb$Population, rowSums(volhyb))
+bp <- barplot(t(as.matrix(volhyb[srt,])), col=ccolhyb, border=NA, names.arg=paste(specp,svhyb$Population)[srt], col.axis="black", cex.names=0.8, axes=FALSE, las=2)
+
+
+srt <- order(svhyb$StartSunset)
+# srt <- srt[specp[srt]=="HOOK"]
+# srt <- srt[specp[srt]=="KAAL"]
+bp <- barplot(t(as.matrix(volhyb[srt,])), col=ccolhyb, border=NA, names.arg=paste(specp,signif(svhyb$StartSunset,2))[srt], col.axis="black", cex.names=0.8, axes=FALSE, las=2)
+
+points(x=bp, y=rep(-10000, length(bp)), xpd=T, pch=ifelse(svhyb$DN == "Day",1,19)[srt])
+svhyb$DTN <- svhyb$DN
+levels(svhyb$DTN) <- c("Day","Night","Afternoon")
+svhyb$DTN[svhyb$DN =="Day" & svhyb$Start >3600*16] <- "Afternoon"
+
+points(x=bp, y=rep(-1000000, length(bp)), xpd=T, pch=as.integer(svhyb$DTN)[srt])
+
+set.seed(1)
+mdshybn1 <- metaMDS(decostand(sqrt(volhybn), method="tot"),k=1,try=200, autotransform=F, trace=0)
+mdshybn1
+srt <- order(specpn,svhybn$Population, rowSums(volhybn))
+srt <- order(specpn, mdshybn1$points)
+srt <- order(mdshybn$points[,1])
+srt <- order(atan(mdshybn$points[,1]/(mdshybn$points[,2]+0.2)))
+par(mar=c(2,0,1,0))
+
+png(file = "output/hybrids/barplot3.png", bg = "white", width=1600,height=1200)
+barplot(t(as.matrix(svolhybn[srt,])), col=ccolhyb, border=NA, col.axis="black", axisnames=T, axes=FALSE, las=2, names.arg=specpn[srt])
+dev.off()
+
+
+par(mfrow=c(1,1))
+plot.new()
+topn <- names(head(sort(colSums(volhyb), decreasing=T), n=10))
+legend("center", topn, fill=ccolhyb[order(colSums(volhyb), decreasing=T)], xpd=T, cex=70/max(nchar(topn)))
+```
+
+
+```{r 2dnmdsnightcentroid}
+#TODO:  lumping with hybparentsn doesn't work!!!
+#take the centroid for each plant (lump plant, inflorescence, bag, but not clones)
+obj.lump.sites <- obj %>% 
+  filter(score=="sites") %>% 
+  mutate(hybparentsn=hybparentsn, hybplantsn=hybplantsn, hybplantsin=hybplantsin) %>% 
+  mutate_if(is.character, as.factor) %>%
+  group_by(score, label, SpeciesR, hybplantsn, hybparentsn, hybplantsin) %>% 
+  summarize_if(is.numeric, mean)
+
+obj.lump <- bind_rows(obj.lump.sites, obj %>% filter(score!="sites"))
+
+(hybnplot <- ggplot(obj.lump, aes(x=NMDS1, y=NMDS2)) + 
+    coord_fixed(xlim=range(obj.lump$NMDS1[obj$score=="sites"])+c(-0.1,0.5), ylim=range(obj.lump$NMDS2[obj.lump$score=="sites"])) + 
+    theme_pubr()+
+    scale_x_continuous(expand=c(0,0),breaks=c(-1,-0.5,0,0.5,1))+
+    #scale_x_reverse(expand=c(0,0),labels=function(x) -x, breaks=c(-1,-0.5,0,0.5,1)) +
+    theme(legend.text = element_text(size=13)) + 
+    guides(fill = guide_legend(override.aes = list(size=5)), color=guide_legend(override.aes=list(size=3))))
+
+library(ggrepel)
+(hybplotn.spec <- hybnplot + 
+    scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+      scale_color_manual("",breaks=c("cross","parents"), labels=c("Cross","Clone"), values=c(cross="grey90", parents="grey40")) +
+    geom_path(data=obj.lump[obj.lump$score=="sites",],aes(group=hybplantsn, color="cross"), size=1) +
+    geom_path(data=obj.lump[obj.lump$score=="sites",],aes(group=hybparentsn, color="parents"), size=1) +
+    geom_point(data=obj.lump[obj.lump$score=="sites",], aes(fill=SpeciesR), shape=21, size=2.5, color="white") +
+    geom_text_repel(data=obj.lump[obj.lump$score=="species" & obj.lump$ftotal>1.5e4 & obj.lump$occur>nrow(volhybn)*0.20,], aes(label=label), color="black", fontface="bold", alpha=0.5, point.padding=0, box.padding=0, seed=0) ) 
+
+ggsave("output/hybrids/hybnmdsnight3_lump_plant.png", hybplotn.spec, height=8, width=10)
+ggsave("output/hybrids/hybnmdsnight3_lump_plant.pdf", hybplotn.spec, height=8, width=10, device=cairo_pdf)
+```
+
+
+```{r 2dnmdsnightmean}
+svhybn$Individual
+volhybn.mean <- volhybn %>% mutate(Sample = svhybn$Sample) %>% 
+  left_join(dplyr::select(svhybn, c(Sample, SpeciesR, plants, parents, plantsi))) %>% 
+  mutate_if(is.character, as.factor) %>% 
+ group_by(SpeciesR, plants, parents, plantsi) %>% summarize_if(is.numeric, mean)
+
+volhybn.mean.vols <- volhybn.mean %>% ungroup %>% select_if(is.numeric)
+set.seed(1)
+mdshybn.mean <- metaMDS(decostand(volhybn.mean.vols, method="hellinger"),k=2,try=100, autotransform=F, trace=0)
+mdshybn.mean
+
+library(ggpubr)
+library(ggvegan)
+
+obj.mean <- fortify(mdshybn.mean)
+obj.mean$SpeciesR <- factor(NA,levels=levels(volhybn.mean$SpeciesR)); obj.mean$SpeciesR[obj.mean$score=="sites"] <-  volhybn.mean$SpeciesR
+obj.mean$plants <- factor(NA,levels=levels(volhybn.mean$plants)); obj.mean$plants[obj.mean$score=="sites"] <-  volhybn.mean$plants
+obj.mean$parents <- factor(NA,levels=levels(volhybn.mean$parents)); obj.mean$parents[obj.mean$score=="sites"] <-  volhybn.mean$parents
+obj.mean$occur <- NA; obj.mean$occur[obj.mean$score=="species"] <- colSums(pavolhyb[svhyb$DN=="Night",])
+obj.mean$ftotal <- NA; obj.mean$ftotal[obj.mean$score=="species"] <- colSums(fvolhyb[svhyb$DN=="Night",])
+obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
+
+(hybplotn.mean.spec <- 
+    ggplot(obj.mean, aes(x=NMDS1, y=NMDS2)) + 
+    coord_fixed(xlim=range(obj.mean$NMDS1[obj.mean$score=="sites"])+c(-0.55,0.1), 
+                ylim=range(obj.mean$NMDS2[obj.mean$score=="sites"])) + 
+    theme_pubr()+
+    scale_x_continuous(expand=c(0,0))+
+    theme(legend.text = element_text(size=13)) + 
+    guides(fill = guide_legend(override.aes = list(size=5)), color=guide_legend(override.aes=list(size=3)))+
+    scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+      scale_color_manual("",breaks=c("cross","parents"), labels=c("Cross","Clone"), values=c(cross="grey90", parents="grey60")) +
+    geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=plants, color="cross"), size=1) +
+    geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=parents, color="parents"), size=1) +
+    geom_point(data=obj.mean[obj.mean$score=="sites",], aes(fill=SpeciesR), shape=21, size=2.5, color="white") +
+    geom_text(data=obj.mean[obj.mean$score=="species" & obj.mean$ftotal>1.5e4 & obj.mean$occur>nrow(volhybn)*0.20,], aes(label=label), color="black",  alpha=1, size=3.8) 
+    ) 
+
+ggsave("output/hybrids/hybnmdsnight3_mean_plant.png", hybplotn.mean.spec, height=8, width=10)
+ggsave("output/hybrids/hybnmdsnight3_mean_plant.pdf", hybplotn.mean.spec, height=8, width=10, device=cairo_pdf)
+```
