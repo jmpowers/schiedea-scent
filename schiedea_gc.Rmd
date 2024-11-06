@@ -5,10 +5,10 @@ date: "`r Sys.Date()`"
 output:
   html_document:
   self_contained: no
-lib_dir: libs
-code_folding: hide
-toc: yes
-toc_float: TRUE
+  lib_dir: libs
+  code_folding: hide
+  toc: yes
+  toc_float: TRUE
 editor_options: 
   chunk_output_type: console
 ---
@@ -26,7 +26,7 @@ library(knitr)
 library(reshape2)
 library(viridis)
 knitr::opts_chunk$set(comment="", cache=T, warning = F, message = F, 
-                      fig.path = "images/", dev="svglite", dev.args=list(fix_text_size=FALSE), fig.height=8, fig.width=8)
+                      fig.path = "schiedea_gc_plots/", dev="svglite", dev.args=list(fix_text_size=FALSE), fig.height=8, fig.width=8)
 options(digits=4) # for kables
 source("read_shimadzu.R")
 ```
