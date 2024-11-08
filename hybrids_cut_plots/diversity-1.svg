@@ -152,7 +152,7 @@
   </clipPath>
 </defs>
 <g clip-path='url(#cpNS45OHwyNi43OXw1Ljk4fDMwOS44NA==)'>
-<text transform='translate(20.76,157.91) rotate(-90)' text-anchor='middle' style='font-size: 12.00px;fill: #1A1A1A; font-family: "Arial";'>Volatile emissions (ng/flower/hr)</text>
+<text transform='translate(20.76,157.91) rotate(-90)' text-anchor='middle' style='font-size: 12.00px;fill: #1A1A1A; font-family: "Arial";'>Total volatile emissions (ng/flr/hr)</text>
 </g>
 <g clip-path='url(#cpMC4wMHw1MDQuMDB8MC4wMHwzNjAuMDA=)'>
 <polyline points='50.44,309.84 164.74,309.84 ' style='stroke-width: 1.07; stroke-linecap: butt;' />

@@ -11,7 +11,7 @@
 
 <meta name="author" content="John Powers" />
 
-<meta name="date" content="2024-11-07" />
+<meta name="date" content="2024-11-08" />
 
 <title>Floral scent of Schiedea kaalae x hookeri hybrids</title>
 
@@ -254,7 +254,7 @@ div.tocify {
 hookeri</em> hybrids</h1>
 <h4 class="author"><a href="http://sites.uci.edu/powers/">John
 Powers</a></h4>
-<h4 class="date">2024-11-07</h4>
+<h4 class="date">2024-11-08</h4>
 
 </div>
 
@@ -1026,8 +1026,10 @@ svhybn$shannon &lt;- diversity(volhybn, index=&quot;shannon&quot;)
 
 #Total emissions and diversity plots
 svhybn.long &lt;- svhybn %&gt;% dplyr::select(SpeciesR, ngftot, num_compounds, shannon) %&gt;% pivot_longer(-one_of(&quot;SpeciesR&quot;))
-diversity_vars &lt;- list(&quot;ngftot&quot;, &quot;num_compounds&quot;, &quot;shannon&quot;)
-tukeys &lt;- sapply(setNames(paste(diversity_vars, &#39; ~ SpeciesR&#39;), diversity_vars), 
+diversity_vars &lt;- c(ngftot = &quot;Total volatile emissions (ng/flr/hr)&quot;, 
+                    num_compounds=&quot;Number of compounds&quot;, 
+                    shannon=&quot;Shannon diversity index&quot;)
+tukeys &lt;- sapply(setNames(paste(names(diversity_vars), &#39; ~ SpeciesR&#39;), names(diversity_vars)), 
        function(form) lm(form, data = svhybn) %&gt;% multcomp::glht(linfct = multcomp::mcp(SpeciesR=&quot;Tukey&quot;)) %&gt;% multcomp::cld() %&gt;% `$`(mcletters) %&gt;% `$`(Letters)) %&gt;% 
   as.data.frame %&gt;% tibble::rownames_to_column(&quot;SpeciesR&quot;) %&gt;% mutate(SpeciesR = factor(SpeciesR, levels=levels(svhybn$SpeciesR))) %&gt;% pivot_longer(-one_of(&quot;SpeciesR&quot;)) %&gt;% 
  left_join(svhybn.long  %&gt;%  group_by(name) %&gt;% 
@@ -1035,7 +1037,7 @@ tukeys &lt;- sapply(setNames(paste(diversity_vars, &#39; ~ SpeciesR&#39;), diver
 
 (diversity_plot &lt;-   ggplot(svhybn.long, aes(x=SpeciesR, y=value, fill=SpeciesR))  + 
     facet_wrap(&quot;name&quot;, scales=&quot;free_y&quot;, strip.position = &quot;left&quot;, nrow=1,
-               labeller=as_labeller(c(ngftot = &quot;Volatile emissions (ng/flower/hr)&quot;, num_compounds=&quot;Number of compounds&quot;, shannon=&quot;Shannon diversity index&quot;)))+
+               labeller=as_labeller(diversity_vars))+
     geom_text(aes(label=value,y=height), data=tukeys)+
     geom_boxplot()+    theme_pubr() + 
     scale_fill_manual(&quot;Species&quot;, values=hybcolr) +
@@ -1078,43 +1080,76 @@ grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.317,0.417),y=0.964, gp=gpar
 </div>
 <div id="boxplots-of-each-volatile" class="section level1">
 <h1>Boxplots of each volatile</h1>
-<pre class="r"><code>mincount &lt;- 23
-mfvolhyb &lt;- ngfvolhyb[svhyb$DN==&quot;Night&quot;,colSums(pavolhyb[svhyb$DN==&quot;Night&quot;,])&gt;mincount]
-mfvolhyb$Species &lt;- svhyb$SpeciesR[svhyb$DN==&quot;Night&quot;]
-meltfvolhyb &lt;- reshape2::melt(mfvolhyb, id.vars=c(&quot;Species&quot;))
+<pre class="r"><code>multiline &lt;- c(&quot;DMNT&quot;=&quot;(3E)-4,8-dimethylnona-1,3,7-triene&quot;,
+               &quot;2,2,6-trimethylcyclohexane-\n1,4-dione&quot;=&quot;2,2,6-trimethylcyclohexane-1,4-dione&quot;,
+               &quot;4-hydroxy-2,6,6-trimethyl-\n3-oxocyclohexene-\n1-carbaldehyde&quot;=
+                 &quot;4-hydroxy-2,6,6-trimethyl-3-oxocyclohexene-1-carbaldehyde&quot;)
 
-#put chemicals in order of NMDS
-set.seed(1)
-mdshybn1 &lt;- metaMDS(decostand(sqrt(ngvolhybn), method=&quot;tot&quot;),k=1,try=200, autotransform=F, trace=0)
-meltfvolhyb$variable &lt;- reorder(meltfvolhyb$variable, -mdshybn1$species[match(meltfvolhyb$variable, row.names(mdshybn1$species))])
-levels(meltfvolhyb$variable)[match(c(&quot;(3E)-4,8-dimethylnona-1,3,7-triene&quot;,
-                                     &quot;2,2,6-trimethylcyclohexane-1,4-dione&quot;,
-                                     &quot;4-hydroxy-2,6,6-trimethyl-3-oxocyclohexene-1-carbaldehyde&quot;) , levels(meltfvolhyb$variable)) ] &lt;- c(&quot;DMNT&quot;,                       &quot;2,2,6-trimethylcyclohexane-\n1,4-dione&quot;,
-                                     &quot;4-hydroxy-2,6,6-trimethyl-\n3-oxocyclohexene-\n1-carbaldehyde&quot;)
+minprop &lt;- 0.2 #compound must occur in greater than this proportion of evening samples
+ngfvolhybn.top &lt;- ngfvolhybn %&gt;% 
+  select(where(~sum(.x&gt;0) &gt; length(.x) * minprop)) %&gt;% 
+  bind_cols(select(svhybn, Species=SpeciesR, all_of(names(diversity_vars)))) %&gt;% 
+  pivot_longer(!Species, names_to=&quot;variable&quot;) %&gt;% 
+  mutate(variable = fct_recode(variable, !!!multiline))
 
-ggplot(meltfvolhyb) + geom_boxplot(aes(x=Species, y=value, color=Species),  outlier.size=1) + 
+#compare mean of hybrid cross directions to mean of parent species
+#compare hybrid cross directions to each other
+tests.glht &lt;- ngfvolhybn.top %&gt;% group_by(variable) %&gt;% nest() %&gt;% 
+  mutate(model = map(data, ~lm(value ~ Species, data=.x)),
+         emm = map(model, ~tidy(summary(emmeans(.x, specs=&quot;Species&quot;)))),
+         test.direction = map(model, ~tidy(multcomp::glht(.x, linfct = multcomp::mcp(Species=c(&quot;`K x H` - `H x K` == 0&quot;))))),
+         test.parmean = map(model, ~tidy(multcomp::glht(.x, linfct = multcomp::mcp(Species=c(&quot;0.5 * `K x H` + 0.5 * `H x K` - 0.5 * `S. kaalae` - 0.5 * `S. hookeri`== 0&quot;))))))
+
+tests.emm &lt;- tests.glht %&gt;% mutate(maximum = map_dbl(data, ~max(.x$value))) %&gt;% 
+  select(variable, emm, maximum) %&gt;% unnest(emm)
+tests.index &lt;- tests.emm %&gt;% 
+  select(variable, Species, maximum, estimate) %&gt;% pivot_wider(names_from=Species, values_from=estimate) %&gt;% 
+  mutate(par.mean = (`S. hookeri` + `S. kaalae`)/2,
+         hyb.mean = (`K x H`+`H x K`)/2,
+         hyb.index = if_else(`S. kaalae`&gt; `S. hookeri`, 
+                             (hyb.mean -`S. hookeri`)/ `S. kaalae`, 
+                             (hyb.mean -`S. kaalae`)/ `S. hookeri`))
+tests.direction &lt;- tests.glht %&gt;% select(variable, test.direction) %&gt;% unnest(test.direction) %&gt;% 
+  mutate(adj.p.value = p.adjust(adj.p.value, method=&quot;fdr&quot;)) %&gt;% select(variable, direction.pvalue = adj.p.value)
+tests.parmean &lt;- tests.glht %&gt;% select(variable, test.parmean) %&gt;% unnest(test.parmean) %&gt;% 
+  mutate(adj.p.value = p.adjust(adj.p.value, method=&quot;fdr&quot;)) %&gt;% select(variable, parmean.pvalue = adj.p.value)
+boxplot.order &lt;- tests.index %&gt;% arrange(-hyb.index) %&gt;% pull(variable)
+tests.all &lt;- tests.index %&gt;% left_join(tests.direction) %&gt;% left_join(tests.parmean) %&gt;%
+  mutate(variable=factor(variable, levels=boxplot.order))
+
+tests.diversity &lt;- tests.all %&gt;% filter(variable %in% names(diversity_vars)) 
+tests.emm.diversity &lt;- tests.emm %&gt;% filter(variable %in% names(diversity_vars)) 
+tests.all &lt;- tests.all %&gt;% filter(!variable %in% names(diversity_vars)) 
+tests.emm &lt;- tests.emm %&gt;% filter(!variable %in% names(diversity_vars)) 
+
+signif.num &lt;- function(x) {
+   cut(x, breaks = c(0, 0.001, 0.01, 0.05, 1), 
+           labels = c(&quot;***&quot;, &quot;**&quot;, &quot;*&quot;, &quot; &quot;), include.lowest = T)
+}
+ngfvolhybn.top %&gt;% mutate(variable=factor(variable, levels=boxplot.order)) %&gt;% 
+  filter(!variable %in% names(diversity_vars)) %&gt;% 
+  ggplot() +  geom_boxplot(aes(x=Species, y=value, color=Species), width=0.5, outlier.size=1) + 
+  geom_text(data=tests.all, aes(label=signif.num(parmean.pvalue), x=2.5, y=pmax(par.mean,hyb.mean)*1.5)) + 
+  geom_point(data=tests.emm, aes(x=Species, y=pmax(estimate,0), color=Species), shape=4, size=2)+
+  geom_point(data=tests.all, aes(x=2.5, y=par.mean, shape=&quot;parmean&quot;), size=2)+
+  geom_point(data=tests.all, aes(x=2.5, y=hyb.mean, shape=&quot;hybmean&quot;), size=2)+
+  scale_shape_manual(&quot;Mean&quot;,values=c(parmean=3, hybmean=5), labels=c(parmean=&quot;Species&quot;, hybmean=&quot;Hybrids&quot;))+
   facet_wrap(vars(variable), scales=&quot;free_y&quot;, ncol=4, labeller = labeller(variable = label_wrap_gen(18))) +
-  scale_color_manual(values=hybcolr) +
-  scale_y_sqrt(&quot;Emission rate (ng/flower/hr)&quot;) + theme_minimal() + #, labels=scientific_10
+  scale_color_manual(&quot;&quot;, values=hybcolr) +
+  scale_y_sqrt(&quot;Emission rate (ng/flower/hr)&quot;, limits=c(0,NA)) + theme_minimal() + 
   theme(axis.text.x=element_blank(), axis.title.x=element_blank(), panel.grid.major.x=element_blank(), legend.position = &quot;top&quot;)</code></pre>
 <p><img src="hybrids_cut_plots/boxplots-1.svg" width="864" /></p>
-<pre class="r"><code>halfway &lt;- meltfvolhyb %&gt;% filter(Species %in% c(&quot;S. hookeri&quot;, &quot;S. kaalae&quot;)) %&gt;% 
-  group_by(Species, variable) %&gt;% summarize(specmean = mean(value)) %&gt;% 
-  group_by(variable) %&gt;% summarize(parentmean = mean(specmean))
-test.halfway &lt;- meltfvolhyb %&gt;% filter(!Species %in% c(&quot;S. hookeri&quot;, &quot;S. kaalae&quot;)) %&gt;% #just hybrids
-  dplyr::select(-Species) %&gt;%  group_by(variable) %&gt;% nest() %&gt;% 
-  left_join(halfway) %&gt;% 
-  mutate(model = map2(data, parentmean, 
-                      function(dat, testagainst) tidy(t.test(pull(dat, value), mu=testagainst)))) %&gt;% 
-  dplyr::select(-data) %&gt;% unnest(model)
-
-ggplot(meltfvolhyb) +  geom_boxplot(aes(x=Species, y=value, color=Species),  outlier.size=1) + 
-  facet_wrap(vars(variable), scales=&quot;free_y&quot;, ncol=4, labeller = labeller(variable = label_wrap_gen(18))) +
-  geom_text(data=test.halfway, aes(x=2.5, y=0, label=if_else(p.value &lt;0.05, as.character(round(estimate, 2)), &quot;&quot;)))+
-  geom_pointrange(data=test.halfway, aes(x=2.3, y=estimate, ymin=conf.low, ymax=conf.high))+
-  geom_point(data=test.halfway, aes(x=2.7, y=parentmean, color=&quot;blue&quot;))+
-  scale_color_manual(values=hybcolr) +
-  scale_y_sqrt(&quot;Emission rate (ng/flower/hr)&quot;) + theme_minimal() + #, labels=scientific_10
+<pre class="r"><code>ngfvolhybn.top %&gt;% mutate(variable=factor(variable, levels=boxplot.order)) %&gt;% 
+  filter(variable %in% names(diversity_vars)) %&gt;% 
+  ggplot() +  geom_boxplot(aes(x=Species, y=value, color=Species), width=0.5, outlier.size=1) + 
+  geom_text(data=tests.diversity, aes(label=signif.num(parmean.pvalue), x=2.5, y=pmax(par.mean,hyb.mean)*1.5)) + 
+  geom_point(data=tests.emm.diversity, aes(x=Species, y=pmax(estimate,0), color=Species), shape=4, size=2)+
+  geom_point(data=tests.diversity, aes(x=2.5, y=par.mean, shape=&quot;parmean&quot;), size=2)+
+  geom_point(data=tests.diversity, aes(x=2.5, y=hyb.mean, shape=&quot;hybmean&quot;), size=2)+
+  scale_shape_manual(&quot;Mean&quot;,values=c(parmean=3, hybmean=5), labels=c(parmean=&quot;Species&quot;, hybmean=&quot;Hybrids&quot;))+
+  facet_wrap(vars(variable), scales=&quot;free_y&quot;, ncol=4, labeller = as_labeller(diversity_vars)) +
+  scale_color_manual(&quot;&quot;, values=hybcolr) +
+  scale_y_continuous(&quot;&quot;, limits=c(0,NA)) + theme_minimal() + 
   theme(axis.text.x=element_blank(), axis.title.x=element_blank(), panel.grid.major.x=element_blank(), legend.position = &quot;top&quot;)</code></pre>
 <p><img src="hybrids_cut_plots/boxplots-2.svg" width="864" /></p>
 </div>
