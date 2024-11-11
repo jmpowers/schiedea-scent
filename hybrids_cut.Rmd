@@ -310,62 +310,30 @@ print("test if hybrids are different from arithmetic average of two species")
 lm.ftot %>% multcomp::glht(linfct = multcomp::mcp(SpeciesR="Tukey")) %>% summary 
 ```
 
-```{r diversity, fig.height=5, fig.width=7}
-#Number of compounds
-svhybn$num_compounds <- rowSums(pavolhyb[svhyb$DN=="Night",])
-
-#Shannon diversity
-svhybn$shannon <- diversity(volhybn, index="shannon")
-
-#Total emissions and diversity plots
-svhybn.long <- svhybn %>% dplyr::select(SpeciesR, ngftot, num_compounds, shannon) %>% pivot_longer(-one_of("SpeciesR"))
-diversity_vars <- c(ngftot = "Total volatile emissions (ng/flr/hr)", 
-                    num_compounds="Number of compounds", 
-                    shannon="Shannon diversity index")
-tukeys <- sapply(setNames(paste(names(diversity_vars), ' ~ SpeciesR'), names(diversity_vars)), 
-       function(form) lm(form, data = svhybn) %>% multcomp::glht(linfct = multcomp::mcp(SpeciesR="Tukey")) %>% multcomp::cld() %>% `$`(mcletters) %>% `$`(Letters)) %>% 
-  as.data.frame %>% tibble::rownames_to_column("SpeciesR") %>% mutate(SpeciesR = factor(SpeciesR, levels=levels(svhybn$SpeciesR))) %>% pivot_longer(-one_of("SpeciesR")) %>% 
- left_join(svhybn.long  %>%  group_by(name) %>% 
-  summarize(height = max(value) + .3 * sd(value)))
-
-(diversity_plot <-   ggplot(svhybn.long, aes(x=SpeciesR, y=value, fill=SpeciesR))  + 
-    facet_wrap("name", scales="free_y", strip.position = "left", nrow=1,
-               labeller=as_labeller(diversity_vars))+
-    geom_text(aes(label=value,y=height), data=tukeys)+
-    geom_boxplot()+    theme_pubr() + 
-    scale_fill_manual("Species", values=hybcolr) +
-    labs(y=NULL, x=NULL)+
-    theme(strip.background = element_blank(), strip.placement = "outside", strip.text = element_text(size=12),
-          legend.position = "bottom",
-          axis.text.x=element_blank(), axis.ticks.x=element_blank()))
-```
-
 # Heatmap
 
 ```{r heatmap,  dev="png", dev.args=list(), fig.width=10.5, fig.height=7.6}
 #1 dimensional NMDS for ordering samples in heatmap
 set.seed(1)
 mdshybn1 <- metaMDS(decostand(ngvolhybn, method="hellinger"),k=1,try=200, autotransform=F, trace=0)
+srt <- order(svhybn$SpeciesR, -mdshybn1$points, decreasing=T)
+
+#Include volatiles found in at least this many samples
+mincount <- 15
 
 callback = function(hc, mat){
     sv = svd(t(mat))$v[,1]
     dend = reorder(as.dendrogram(hc), wts = sv)
     as.hclust(dend)
 }
-mincount <- 15
-srt <- order(svhybn$SpeciesR, -mdshybn1$points, decreasing=T)
-rn <- rownames(volhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount])
-
-#TODO hybrid cross directions are intermixed
-###TODO MIGHT BE A BUG HERE see schiedea_gc.R globosa heatmap. annotations are using row.names=rn and matching them up somehow
-pheatmap(as.matrix(t(ngfvolhyb[svhyb$DN=="Night",colSums(pavolhyb[svhyb$DN=="Night",])>mincount][srt,]))^(1/3), 
+pheatmap(as.matrix(t(ngfvolhybn[,colSums(pavolhyb[svhyb$DN=="Night",])>mincount][srt,]))^(1/3), 
          cluster_cols=F, show_colnames=F,
          clustering_method="mcquitty", clustering_distance_rows="correlation",
          clustering_callback = function(hc, ...){dendsort(hc, type="average")},
          scale="none", color=inferno(512),
-         annotation_col = data.frame(Species=as.integer(svhyb$SpeciesR[svhyb$DN=="Night"])[srt], row.names=rn), 
+         annotation_col = data.frame(Species=as.integer(svhybn$SpeciesR)[srt], row.names=rownames(ngfvolhybn)[srt]), 
          annotation_colors = list(Species=hybcolr), 
-         gaps_col = which(as.logical(diff(as.integer(svhyb$SpeciesR[svhyb$DN=="Night"])[srt]))),
+         gaps_col = which(as.logical(diff(as.integer(svhybn$SpeciesR)[srt]))),
    cellwidth = 3.5, cellheight = 14, fontsize = 10, border_color = NA, legend=F, legend_breaks=NA, annotation_legend=F, cutree_rows=5
 )
 grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=c(0.165,0.54),y=0.964, gp=gpar(fontsize=10, col="white", fontface=4))
@@ -375,6 +343,12 @@ grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.317,0.417),y=0.964, gp=gpar
 # Boxplots of each volatile
 
 ```{r boxplots, fig.width=9, fig.height=12}
+diversity_vars <- c(ngftot = "Total volatile emissions (ng/flr/hr)", 
+                    num_compounds="Number of compounds", 
+                    shannon="Shannon diversity index")
+svhybn$num_compounds <- rowSums(pavolhyb[svhyb$DN=="Night",])
+svhybn$shannon <- diversity(volhybn, index="shannon")
+
 multiline <- c("DMNT"="(3E)-4,8-dimethylnona-1,3,7-triene",
                "2,2,6-trimethylcyclohexane-\n1,4-dione"="2,2,6-trimethylcyclohexane-1,4-dione",
                "4-hydroxy-2,6,6-trimethyl-\n3-oxocyclohexene-\n1-carbaldehyde"=
@@ -405,17 +379,19 @@ tests.index <- tests.emm %>%
                              (hyb.mean -`S. hookeri`)/ `S. kaalae`, 
                              (hyb.mean -`S. kaalae`)/ `S. hookeri`))
 tests.direction <- tests.glht %>% select(variable, test.direction) %>% unnest(test.direction) %>% 
-  mutate(adj.p.value = p.adjust(adj.p.value, method="fdr")) %>% select(variable, direction.pvalue = adj.p.value)
+  select(variable, direction.p.value = adj.p.value)
 tests.parmean <- tests.glht %>% select(variable, test.parmean) %>% unnest(test.parmean) %>% 
-  mutate(adj.p.value = p.adjust(adj.p.value, method="fdr")) %>% select(variable, parmean.pvalue = adj.p.value)
+  select(variable, parmean.p.value = adj.p.value)
 boxplot.order <- tests.index %>% arrange(-hyb.index) %>% pull(variable)
 tests.all <- tests.index %>% left_join(tests.direction) %>% left_join(tests.parmean) %>%
   mutate(variable=factor(variable, levels=boxplot.order))
 
-tests.diversity <- tests.all %>% filter(variable %in% names(diversity_vars)) 
-tests.emm.diversity <- tests.emm %>% filter(variable %in% names(diversity_vars)) 
-tests.all <- tests.all %>% filter(!variable %in% names(diversity_vars)) 
-tests.emm <- tests.emm %>% filter(!variable %in% names(diversity_vars)) 
+tests.diversity <- tests.all %>% filter(variable %in% names(diversity_vars)) %>% 
+    mutate(across(contains("p.value"), ~p.adjust(.x, method="fdr")))
+tests.vols <- tests.all %>% filter(!variable %in% names(diversity_vars)) %>% 
+    mutate(across(contains("p.value"), ~p.adjust(.x, method="fdr")))
+emm.diversity <- tests.emm %>% filter(variable %in% names(diversity_vars)) 
+emm.vols <- tests.emm %>% filter(!variable %in% names(diversity_vars)) 
 
 signif.num <- function(x) {
    cut(x, breaks = c(0, 0.001, 0.01, 0.05, 1), 
@@ -424,28 +400,33 @@ signif.num <- function(x) {
 ngfvolhybn.top %>% mutate(variable=factor(variable, levels=boxplot.order)) %>% 
   filter(!variable %in% names(diversity_vars)) %>% 
   ggplot() +  geom_boxplot(aes(x=Species, y=value, color=Species), width=0.5, outlier.size=1) + 
-  geom_text(data=tests.all, aes(label=signif.num(parmean.pvalue), x=2.5, y=pmax(par.mean,hyb.mean)*1.5)) + 
-  geom_point(data=tests.emm, aes(x=Species, y=pmax(estimate,0), color=Species), shape=4, size=2)+
-  geom_point(data=tests.all, aes(x=2.5, y=par.mean, shape="parmean"), size=2)+
-  geom_point(data=tests.all, aes(x=2.5, y=hyb.mean, shape="hybmean"), size=2)+
+  geom_text(data=tests.vols, aes(label=signif.num(parmean.p.value), x=2.5, y=pmax(par.mean,hyb.mean)*1.5)) + 
+  geom_point(data=emm.vols, aes(x=Species, y=pmax(estimate,0), color=Species), shape=4, size=2)+
+  geom_point(data=tests.vols, aes(x=2.5, y=par.mean, shape="parmean"), size=2)+
+  geom_point(data=tests.vols, aes(x=2.5, y=hyb.mean, shape="hybmean"), size=2)+
   scale_shape_manual("Mean",values=c(parmean=3, hybmean=5), labels=c(parmean="Species", hybmean="Hybrids"))+
   facet_wrap(vars(variable), scales="free_y", ncol=4, labeller = labeller(variable = label_wrap_gen(18))) +
   scale_color_manual("", values=hybcolr) +
   scale_y_sqrt("Emission rate (ng/flower/hr)", limits=c(0,NA)) + theme_minimal() + 
-  theme(axis.text.x=element_blank(), axis.title.x=element_blank(), panel.grid.major.x=element_blank(), legend.position = "top")
+  theme(axis.text.x=element_blank(), axis.title.x=element_blank(), 
+        panel.grid.major.x=element_blank(), panel.grid.minor.y=element_blank(), legend.position = "top")
+```
 
-ngfvolhybn.top %>% mutate(variable=factor(variable, levels=boxplot.order)) %>% 
-  filter(variable %in% names(diversity_vars)) %>% 
+# Total emissions and diversity
+
+```{r diversity, fig.height=4, fig.width=6.5}
+ngfvolhybn.top %>% filter(variable %in% names(diversity_vars)) %>% 
   ggplot() +  geom_boxplot(aes(x=Species, y=value, color=Species), width=0.5, outlier.size=1) + 
-  geom_text(data=tests.diversity, aes(label=signif.num(parmean.pvalue), x=2.5, y=pmax(par.mean,hyb.mean)*1.5)) + 
-  geom_point(data=tests.emm.diversity, aes(x=Species, y=pmax(estimate,0), color=Species), shape=4, size=2)+
+  geom_text(data=tests.diversity, aes(label=signif.num(parmean.p.value), x=2.5, y=pmax(par.mean,hyb.mean)*1.1)) + 
+  geom_point(data=emm.diversity, aes(x=Species, y=pmax(estimate,0), color=Species), shape=4, size=2)+
   geom_point(data=tests.diversity, aes(x=2.5, y=par.mean, shape="parmean"), size=2)+
   geom_point(data=tests.diversity, aes(x=2.5, y=hyb.mean, shape="hybmean"), size=2)+
   scale_shape_manual("Mean",values=c(parmean=3, hybmean=5), labels=c(parmean="Species", hybmean="Hybrids"))+
   facet_wrap(vars(variable), scales="free_y", ncol=4, labeller = as_labeller(diversity_vars)) +
-  scale_color_manual("", values=hybcolr) +
+  scale_color_manual("", values=hybcolr) + 
   scale_y_continuous("", limits=c(0,NA)) + theme_minimal() + 
-  theme(axis.text.x=element_blank(), axis.title.x=element_blank(), panel.grid.major.x=element_blank(), legend.position = "top")
+  theme(axis.text.x=element_blank(), axis.title.x=element_blank(), 
+        panel.grid.major.x=element_blank(), panel.grid.minor.y=element_blank(), legend.position = "top")
 ```
 
 # NMDS ordination
