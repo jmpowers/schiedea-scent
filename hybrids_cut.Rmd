@@ -386,11 +386,10 @@ boxplot.order <- tests.index %>% arrange(-hyb.index) %>% pull(variable)
 tests.all <- tests.index %>% left_join(tests.direction) %>% left_join(tests.parmean) %>%
   mutate(variable=factor(variable, levels=boxplot.order))
 
-tests.diversity <- tests.all %>% filter(variable %in% names(diversity_vars)) %>% 
-    mutate(across(contains("p.value"), ~p.adjust(.x, method="fdr")))
 tests.vols <- tests.all %>% filter(!variable %in% names(diversity_vars)) %>% 
     mutate(across(contains("p.value"), ~p.adjust(.x, method="fdr")))
-emm.diversity <- tests.emm %>% filter(variable %in% names(diversity_vars)) 
+tests.vols %>% select(-c(maximum, hyb.index)) %>% mutate(variable=str_remove_all(variable, "\n")) %>% 
+  kable(caption = "tests of total emissions and diversity", digits=3)
 emm.vols <- tests.emm %>% filter(!variable %in% names(diversity_vars)) 
 
 signif.num <- function(x) {
@@ -415,6 +414,11 @@ ngfvolhybn.top %>% mutate(variable=factor(variable, levels=boxplot.order)) %>%
 # Total emissions and diversity
 
 ```{r diversity, fig.height=4, fig.width=6.5}
+tests.diversity <- tests.all %>% filter(variable %in% names(diversity_vars)) %>% 
+    mutate(across(contains("p.value"), ~p.adjust(.x, method="fdr"))) 
+tests.diversity %>% select(-c(maximum, hyb.index)) %>% kable(caption = "tests of total emissions and diversity", digits=3)
+emm.diversity <- tests.emm %>% filter(variable %in% names(diversity_vars)) 
+
 ngfvolhybn.top %>% filter(variable %in% names(diversity_vars)) %>% 
   ggplot() +  geom_boxplot(aes(x=Species, y=value, color=Species), width=0.5, outlier.size=1) + 
   geom_text(data=tests.diversity, aes(label=signif.num(parmean.p.value), x=2.5, y=pmax(par.mean,hyb.mean)*1.1)) + 
