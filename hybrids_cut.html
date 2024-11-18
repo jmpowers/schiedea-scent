@@ -11,7 +11,7 @@
 
 <meta name="author" content="John Powers" />
 
-<meta name="date" content="2024-11-14" />
+<meta name="date" content="2024-11-17" />
 
 <title>Floral scent of Schiedea kaalae x hookeri hybrids</title>
 
@@ -254,7 +254,7 @@ div.tocify {
 hookeri</em> hybrids</h1>
 <h4 class="author"><a href="http://sites.uci.edu/powers/">John
 Powers</a></h4>
-<h4 class="date">2024-11-14</h4>
+<h4 class="date">2024-11-17</h4>
 
 </div>
 
@@ -1531,17 +1531,16 @@ obj$occur &lt;- NA; obj$occur[obj$score==&quot;species&quot;] &lt;- colSums(pavo
 obj$ftotal &lt;- NA; obj$ftotal[obj$score==&quot;species&quot;] &lt;- colSums(fvolhyb[svhyb$DN==&quot;Night&quot;,])
 obj &lt;- obj %&gt;% arrange(NMDS2, NMDS1)
 
-hybnplot &lt;- ggplot(obj, aes(x=NMDS1, y=NMDS2)) + 
+hybnplot &lt;- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) + 
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=plants, color=&quot;cross&quot;), linewidth=1) +
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=parents, color=&quot;parents&quot;), linewidth=1) +
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=plantsi, color=&quot;plantsi&quot;), linewidth=1) +
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=plantsinflo, color=&quot;plantsinflo&quot;), linewidth=1) +
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=plantsinflodate, color=&quot;plantsinflodate&quot;), linewidth=1) +
   scale_color_manual(&quot;&quot;,breaks=c(&quot;cross&quot;,&quot;parents&quot;,&quot;plantsi&quot;,&quot;plantsinflo&quot;,&quot;plantsinflodate&quot;), labels=c(&quot;Cross&quot;,&quot;Clone&quot;,&quot;Plant&quot;,&quot;Inflorescence&quot;,&quot;Bag&quot;), values=c(cross=&quot;grey90&quot;, parents=&quot;grey60&quot;, plantsi=&quot;grey30&quot;, plantsinflo=brewer.pal(6,&quot;Set1&quot;)[6],plantsinflodate=brewer.pal(6,&quot;Set1&quot;)[1],sites=&quot;white&quot;,species=NA)) +
-      coord_fixed(xlim=range(obj$NMDS1[obj$score==&quot;sites&quot;])+c(-0.2,0.6), 
+      coord_fixed(xlim=range(obj$NMDS1[obj$score==&quot;sites&quot;])+c(-0.35,0.45), 
                   ylim=range(obj$NMDS2[obj$score==&quot;sites&quot;])) + theme_pubr()+
-    #scale_x_reverse(expand=c(0,0),labels=function(x) -x, breaks=c(-1,-0.5,0,0.5,1)) +
-    scale_x_continuous(expand=c(0,0))+
+    scale_x_continuous(expand=c(0,0)) +
     theme(legend.text = element_text(size=13)) + 
     guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=3)))
 
@@ -1602,6 +1601,72 @@ obj.mean &lt;- obj.mean %&gt;% arrange(NMDS2, NMDS1)
     geom_text(data=obj.mean[obj.mean$score==&quot;species&quot; &amp; obj.mean$ftotal&gt;1.5e4 &amp; obj.mean$occur&gt;nrow(volhybn)*0.20,], aes(label=label), color=&quot;black&quot;,  alpha=1, size=3.8) 
     ) </code></pre>
 <p><img src="hybrids_cut_plots/2dnmdsnightmean-1.svg" width="1008" /></p>
+</div>
+</div>
+<div id="variation-at-different-levels" class="section level1">
+<h1>Variation at different levels</h1>
+<div id="variation-within-plants" class="section level2">
+<h2>Variation within plants</h2>
+<pre class="r"><code>bd.plantsi &lt;-  betadisper(vegdist(decostand(volhybn, method=&quot;hellinger&quot;), method=&quot;bray&quot;), 
+                           group = svhybn$plantsi)
+meandist.plantsi &lt;- bd.plantsi$group.distances %&gt;% enframe(name=&quot;plantsi&quot;, value=&quot;centroid_dist&quot;) %&gt;%
+  left_join(count(svhybn, plantsi)) %&gt;% filter(n&gt;1)#plants with resamples
+summary(meandist.plantsi$centroid_dist)</code></pre>
+<pre><code>   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0941  0.1036  0.1351  0.1705  0.2111  0.3835 </code></pre>
+</div>
+<div id="variation-among-plants-in-each-cross-type"
+class="section level2">
+<h2>Variation among plants in each cross type</h2>
+<pre class="r"><code>#betadisper(vegdist(decostand(volhybn, method=&quot;hellinger&quot;), method=&quot;bray&quot;), group = specpn) #sample level
+(bd.SpeciesR &lt;- betadisper(vegdist(decostand(volhybn.mean.vols, method=&quot;hellinger&quot;), method=&quot;bray&quot;), 
+                           group = volhybn.mean$SpeciesR))</code></pre>
+<pre><code>
+    Homogeneity of multivariate dispersions
+
+Call: betadisper(d = vegdist(decostand(volhybn.mean.vols, method =
+&quot;hellinger&quot;), method = &quot;bray&quot;), group = volhybn.mean$SpeciesR)
+
+No. of Positive Eigenvalues: 55
+No. of Negative Eigenvalues: 54
+
+Average distance to median:
+ S. kaalae      K x H      H x K S. hookeri 
+    0.1904     0.2198     0.2240     0.3524 
+
+Eigenvalues for PCoA axes:
+(Showing 8 of 109 eigenvalues)
+ PCoA1  PCoA2  PCoA3  PCoA4  PCoA5  PCoA6  PCoA7  PCoA8 
+7.8068 2.5594 1.2737 0.8821 0.6938 0.5641 0.4801 0.4164 </code></pre>
+<pre class="r"><code>anova(bd.SpeciesR)</code></pre>
+<pre><code>Analysis of Variance Table
+
+Response: Distances
+           Df  Sum Sq  Mean Sq F value    Pr(&gt;F)    
+Groups      3 0.50499 0.168330   30.47 2.766e-14 ***
+Residuals 106 0.58560 0.005524                      
+---
+Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<pre class="r"><code>TukeyHSD(bd.SpeciesR)</code></pre>
+<pre><code>  Tukey multiple comparisons of means
+    95% family-wise confidence level
+
+Fit: aov(formula = distances ~ group, data = df)
+
+$group
+                            diff         lwr        upr     p adj
+K x H-S. kaalae      0.029426399 -0.03335116 0.09220396 0.6133651
+H x K-S. kaalae      0.033616712 -0.01526980 0.08250322 0.2814963
+S. hookeri-S. kaalae 0.162068671  0.11531178 0.20882556 0.0000000
+H x K-K x H          0.004190313 -0.06092311 0.06930374 0.9983040
+S. hookeri-K x H     0.132642272  0.06911217 0.19617238 0.0000020
+S. hookeri-H x K     0.128451959  0.07860275 0.17830116 0.0000000</code></pre>
+<pre class="r"><code>tibble(group=bd.SpeciesR$group, distance = bd.SpeciesR$distances) %&gt;% 
+  bind_rows(bd.plantsi$distances %&gt;% enframe(name=&quot;plantsi&quot;, value=&quot;distance&quot;) %&gt;%
+  left_join(count(svhybn, plantsi)) %&gt;% filter(distance!=0) %&gt;% mutate(group=&quot;Within plant&quot;)) %&gt;% 
+  ggplot(aes(x=group, y=distance, color=group)) + geom_boxplot() + scale_color_manual(values=hybcolr, guide=&quot;none&quot;) +
+  theme_classic() + labs(x=&quot;&quot;, y=&quot;Distance to centroid&quot;)</code></pre>
+<p><img src="hybrids_cut_plots/amongplant-1.svg" width="672" /></p>
 </div>
 </div>
 

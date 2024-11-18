@@ -455,17 +455,16 @@ obj$occur <- NA; obj$occur[obj$score=="species"] <- colSums(pavolhyb[svhyb$DN=="
 obj$ftotal <- NA; obj$ftotal[obj$score=="species"] <- colSums(fvolhyb[svhyb$DN=="Night",])
 obj <- obj %>% arrange(NMDS2, NMDS1)
 
-hybnplot <- ggplot(obj, aes(x=NMDS1, y=NMDS2)) + 
+hybnplot <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) + 
     geom_path(data=filter(obj, score=="sites"),aes(group=plants, color="cross"), linewidth=1) +
     geom_path(data=filter(obj, score=="sites"),aes(group=parents, color="parents"), linewidth=1) +
     geom_path(data=filter(obj, score=="sites"),aes(group=plantsi, color="plantsi"), linewidth=1) +
     geom_path(data=filter(obj, score=="sites"),aes(group=plantsinflo, color="plantsinflo"), linewidth=1) +
     geom_path(data=filter(obj, score=="sites"),aes(group=plantsinflodate, color="plantsinflodate"), linewidth=1) +
   scale_color_manual("",breaks=c("cross","parents","plantsi","plantsinflo","plantsinflodate"), labels=c("Cross","Clone","Plant","Inflorescence","Bag"), values=c(cross="grey90", parents="grey60", plantsi="grey30", plantsinflo=brewer.pal(6,"Set1")[6],plantsinflodate=brewer.pal(6,"Set1")[1],sites="white",species=NA)) +
-      coord_fixed(xlim=range(obj$NMDS1[obj$score=="sites"])+c(-0.2,0.6), 
+      coord_fixed(xlim=range(obj$NMDS1[obj$score=="sites"])+c(-0.35,0.45), 
                   ylim=range(obj$NMDS2[obj$score=="sites"])) + theme_pubr()+
-    #scale_x_reverse(expand=c(0,0),labels=function(x) -x, breaks=c(-1,-0.5,0,0.5,1)) +
-    scale_x_continuous(expand=c(0,0))+
+    scale_x_continuous(expand=c(0,0)) +
     theme(legend.text = element_text(size=13)) + 
     guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=3)))
 
@@ -512,3 +511,31 @@ obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
     geom_text(data=obj.mean[obj.mean$score=="species" & obj.mean$ftotal>1.5e4 & obj.mean$occur>nrow(volhybn)*0.20,], aes(label=label), color="black",  alpha=1, size=3.8) 
     ) 
 ```
+
+# Variation at different levels
+
+## Variation within plants
+
+```{r withinplant}
+bd.plantsi <-  betadisper(vegdist(decostand(volhybn, method="hellinger"), method="bray"), 
+                           group = svhybn$plantsi)
+meandist.plantsi <- bd.plantsi$group.distances %>% enframe(name="plantsi", value="centroid_dist") %>%
+  left_join(count(svhybn, plantsi)) %>% filter(n>1)#plants with resamples
+summary(meandist.plantsi$centroid_dist)
+```
+
+## Variation among plants in each cross type
+```{r amongplant}
+#betadisper(vegdist(decostand(volhybn, method="hellinger"), method="bray"), group = specpn) #sample level
+(bd.SpeciesR <- betadisper(vegdist(decostand(volhybn.mean.vols, method="hellinger"), method="bray"), 
+                           group = volhybn.mean$SpeciesR))
+anova(bd.SpeciesR)
+TukeyHSD(bd.SpeciesR)
+
+tibble(group=bd.SpeciesR$group, distance = bd.SpeciesR$distances) %>% 
+  bind_rows(bd.plantsi$distances %>% enframe(name="plantsi", value="distance") %>%
+  left_join(count(svhybn, plantsi)) %>% filter(distance!=0) %>% mutate(group="Within plant")) %>% 
+  ggplot(aes(x=group, y=distance, color=group)) + geom_boxplot() + scale_color_manual(values=hybcolr, guide="none") +
+  theme_classic() + labs(x="", y="Distance to centroid")
+```
+
