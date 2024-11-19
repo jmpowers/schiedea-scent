@@ -195,39 +195,39 @@
 <text x='29.72' y='217.06' text-anchor='end' style='font-size: 8.80px;fill: #4D4D4D; font-family: "Arial";'>30</text>
 <text x='29.72' y='161.05' text-anchor='end' style='font-size: 8.80px;fill: #4D4D4D; font-family: "Arial";'>60</text>
 <text x='29.72' y='105.04' text-anchor='end' style='font-size: 8.80px;fill: #4D4D4D; font-family: "Arial";'>90</text>
-<text x='39.02' y='23.61' style='font-size: 11.00px; font-family: "Arial";'>Mean</text>
-<polygon points='79.59,19.60 83.11,16.08 86.62,19.60 83.11,23.12 ' style='stroke-width: 0.71;' />
-<line x1='141.47' y1='19.60' x2='148.51' y2='19.60' style='stroke-width: 0.71;' />
-<line x1='144.99' y1='23.12' x2='144.99' y2='16.08' style='stroke-width: 0.71;' />
-<text x='97.23' y='22.81' style='font-size: 8.80px; font-family: "Arial";'>Hybrids</text>
-<text x='159.11' y='22.81' style='font-size: 8.80px; font-family: "Arial";'>Species</text>
-<polyline points='229.02,26.51 229.02,23.92 ' style='stroke-width: 1.07; stroke: #31A354; stroke-linecap: butt; stroke-linejoin: miter;' />
-<polyline points='229.02,15.28 229.02,12.69 ' style='stroke-width: 1.07; stroke: #31A354; stroke-linecap: butt; stroke-linejoin: miter;' />
-<rect x='222.54' y='15.28' width='12.96' height='8.64' style='stroke-width: 1.07; stroke: #31A354; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<polyline points='222.54,19.60 235.50,19.60 ' style='stroke-width: 1.07; stroke: #31A354; stroke-linecap: butt; stroke-linejoin: miter;' />
-<line x1='226.53' y1='22.09' x2='231.51' y2='17.11' style='stroke-width: 0.71; stroke: #31A354;' />
-<line x1='226.53' y1='17.11' x2='231.51' y2='22.09' style='stroke-width: 0.71; stroke: #31A354;' />
-<polyline points='297.42,26.51 297.42,23.92 ' style='stroke-width: 1.07; stroke: #FD8D3C; stroke-linecap: butt; stroke-linejoin: miter;' />
-<polyline points='297.42,15.28 297.42,12.69 ' style='stroke-width: 1.07; stroke: #FD8D3C; stroke-linecap: butt; stroke-linejoin: miter;' />
-<rect x='290.94' y='15.28' width='12.96' height='8.64' style='stroke-width: 1.07; stroke: #FD8D3C; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<polyline points='290.94,19.60 303.90,19.60 ' style='stroke-width: 1.07; stroke: #FD8D3C; stroke-linecap: butt; stroke-linejoin: miter;' />
-<line x1='294.94' y1='22.09' x2='299.91' y2='17.11' style='stroke-width: 0.71; stroke: #FD8D3C;' />
-<line x1='294.94' y1='17.11' x2='299.91' y2='22.09' style='stroke-width: 0.71; stroke: #FD8D3C;' />
-<polyline points='348.84,26.51 348.84,23.92 ' style='stroke-width: 1.07; stroke: #A65628; stroke-linecap: butt; stroke-linejoin: miter;' />
-<polyline points='348.84,15.28 348.84,12.69 ' style='stroke-width: 1.07; stroke: #A65628; stroke-linecap: butt; stroke-linejoin: miter;' />
-<rect x='342.36' y='15.28' width='12.96' height='8.64' style='stroke-width: 1.07; stroke: #A65628; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<polyline points='342.36,19.60 355.32,19.60 ' style='stroke-width: 1.07; stroke: #A65628; stroke-linecap: butt; stroke-linejoin: miter;' />
-<line x1='346.35' y1='22.09' x2='351.33' y2='17.11' style='stroke-width: 0.71; stroke: #A65628;' />
-<line x1='346.35' y1='17.11' x2='351.33' y2='22.09' style='stroke-width: 0.71; stroke: #A65628;' />
-<polyline points='400.25,26.51 400.25,23.92 ' style='stroke-width: 1.07; stroke: #756BB1; stroke-linecap: butt; stroke-linejoin: miter;' />
-<polyline points='400.25,15.28 400.25,12.69 ' style='stroke-width: 1.07; stroke: #756BB1; stroke-linecap: butt; stroke-linejoin: miter;' />
-<rect x='393.77' y='15.28' width='12.96' height='8.64' style='stroke-width: 1.07; stroke: #756BB1; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
-<polyline points='393.77,19.60 406.73,19.60 ' style='stroke-width: 1.07; stroke: #756BB1; stroke-linecap: butt; stroke-linejoin: miter;' />
-<line x1='397.77' y1='22.09' x2='402.74' y2='17.11' style='stroke-width: 0.71; stroke: #756BB1;' />
-<line x1='397.77' y1='17.11' x2='402.74' y2='22.09' style='stroke-width: 0.71; stroke: #756BB1;' />
-<text x='243.14' y='22.81' style='font-size: 8.80px; font-family: "Arial";'>S. kaalae</text>
-<text x='311.54' y='22.81' style='font-size: 8.80px; font-family: "Arial";'>K x H</text>
-<text x='362.96' y='22.81' style='font-size: 8.80px; font-family: "Arial";'>H x K</text>
-<text x='414.37' y='22.81' style='font-size: 8.80px; font-family: "Arial";'>S. hookeri</text>
+<text x='38.79' y='23.61' style='font-size: 11.00px; font-family: "Arial";'>Mean</text>
+<polygon points='79.35,19.60 82.87,16.08 86.39,19.60 82.87,23.12 ' style='stroke-width: 0.71;' />
+<line x1='141.24' y1='19.60' x2='148.28' y2='19.60' style='stroke-width: 0.71;' />
+<line x1='144.76' y1='23.12' x2='144.76' y2='16.08' style='stroke-width: 0.71;' />
+<text x='96.99' y='22.81' style='font-size: 8.80px; font-family: "Arial";'>Hybrids</text>
+<text x='158.88' y='22.81' style='font-size: 8.80px; font-family: "Arial";'>Species</text>
+<polyline points='228.79,26.51 228.79,23.92 ' style='stroke-width: 1.07; stroke: #31A354; stroke-linecap: butt; stroke-linejoin: miter;' />
+<polyline points='228.79,15.28 228.79,12.69 ' style='stroke-width: 1.07; stroke: #31A354; stroke-linecap: butt; stroke-linejoin: miter;' />
+<rect x='222.31' y='15.28' width='12.96' height='8.64' style='stroke-width: 1.07; stroke: #31A354; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<polyline points='222.31,19.60 235.27,19.60 ' style='stroke-width: 1.07; stroke: #31A354; stroke-linecap: butt; stroke-linejoin: miter;' />
+<line x1='226.30' y1='22.09' x2='231.28' y2='17.11' style='stroke-width: 0.71; stroke: #31A354;' />
+<line x1='226.30' y1='17.11' x2='231.28' y2='22.09' style='stroke-width: 0.71; stroke: #31A354;' />
+<polyline points='297.34,26.51 297.34,23.92 ' style='stroke-width: 1.07; stroke: #FD8D3C; stroke-linecap: butt; stroke-linejoin: miter;' />
+<polyline points='297.34,15.28 297.34,12.69 ' style='stroke-width: 1.07; stroke: #FD8D3C; stroke-linecap: butt; stroke-linejoin: miter;' />
+<rect x='290.86' y='15.28' width='12.96' height='8.64' style='stroke-width: 1.07; stroke: #FD8D3C; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<polyline points='290.86,19.60 303.82,19.60 ' style='stroke-width: 1.07; stroke: #FD8D3C; stroke-linecap: butt; stroke-linejoin: miter;' />
+<line x1='294.85' y1='22.09' x2='299.83' y2='17.11' style='stroke-width: 0.71; stroke: #FD8D3C;' />
+<line x1='294.85' y1='17.11' x2='299.83' y2='22.09' style='stroke-width: 0.71; stroke: #FD8D3C;' />
+<polyline points='348.76,26.51 348.76,23.92 ' style='stroke-width: 1.07; stroke: #A65628; stroke-linecap: butt; stroke-linejoin: miter;' />
+<polyline points='348.76,15.28 348.76,12.69 ' style='stroke-width: 1.07; stroke: #A65628; stroke-linecap: butt; stroke-linejoin: miter;' />
+<rect x='342.28' y='15.28' width='12.96' height='8.64' style='stroke-width: 1.07; stroke: #A65628; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<polyline points='342.28,19.60 355.24,19.60 ' style='stroke-width: 1.07; stroke: #A65628; stroke-linecap: butt; stroke-linejoin: miter;' />
+<line x1='346.27' y1='22.09' x2='351.24' y2='17.11' style='stroke-width: 0.71; stroke: #A65628;' />
+<line x1='346.27' y1='17.11' x2='351.24' y2='22.09' style='stroke-width: 0.71; stroke: #A65628;' />
+<polyline points='400.17,26.51 400.17,23.92 ' style='stroke-width: 1.07; stroke: #756BB1; stroke-linecap: butt; stroke-linejoin: miter;' />
+<polyline points='400.17,15.28 400.17,12.69 ' style='stroke-width: 1.07; stroke: #756BB1; stroke-linecap: butt; stroke-linejoin: miter;' />
+<rect x='393.69' y='15.28' width='12.96' height='8.64' style='stroke-width: 1.07; stroke: #756BB1; stroke-linecap: butt; stroke-linejoin: miter; fill: #FFFFFF;' />
+<polyline points='393.69,19.60 406.65,19.60 ' style='stroke-width: 1.07; stroke: #756BB1; stroke-linecap: butt; stroke-linejoin: miter;' />
+<line x1='397.68' y1='22.09' x2='402.66' y2='17.11' style='stroke-width: 0.71; stroke: #756BB1;' />
+<line x1='397.68' y1='17.11' x2='402.66' y2='22.09' style='stroke-width: 0.71; stroke: #756BB1;' />
+<text x='242.91' y='22.88' style='font-size: 8.80px; font-style: italic; font-family: "Arial";'>S. kaalae</text>
+<text x='311.46' y='22.81' style='font-size: 8.80px; font-family: "Arial";'>K x H</text>
+<text x='362.88' y='22.81' style='font-size: 8.80px; font-family: "Arial";'>H x K</text>
+<text x='414.29' y='22.88' style='font-size: 8.80px; font-style: italic; font-family: "Arial";'>S. hookeri</text>
 </g>
 </svg>

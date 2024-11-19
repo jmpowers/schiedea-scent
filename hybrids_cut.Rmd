@@ -90,7 +90,9 @@ svhyb$Diurnal[is.na(svhyb$Diurnal)]<-1:sum(is.na(svhyb$Diurnal))
 svhyb$plants  <- hybplants  <- paste(svhyb$Population, svhyb$Plant, sep="-")
 svhyb$plantsi <- hybplantsi <- paste(svhyb$Population, svhyb$Plant, svhyb$Cutting, sep="-")
 svhyb$parents <- hybplants
-svhyb$parents[grepl(" x ", hybplants, fixed=T)]<-1:sum(grepl(" x ", hybplants, fixed=T))#only group by parents, set the crosses to an integer sequence to force them not to group
+svhyb$parents[grepl(" x ", hybplants, fixed=T)]<-1:sum(grepl(" x ", hybplants, fixed=T))#only group by parents, set the crosses to an integer sequence to force them not to group 
+#TODO this splits resamples of the sample cross plant into multiple "parents"
+#TODO also, NMDS below implies these are different cross parents but they are really just the original plant in the parent generation that was used for cuttings
 hybparents <- svhyb$parents
 svhyb$Inflo[is.na(svhyb$Inflo)]<-1:sum(is.na(svhyb$Inflo))
 svhyb$Diurnal[is.na(svhyb$Diurnal)]<-1:sum(is.na(svhyb$Diurnal))
@@ -115,6 +117,7 @@ hybplantsinflodaten <- svhybn$plantsinflodate
 #hybpops <- c("3587WP", "879WKG", "881KHV", "892WKG", "904WPG", "HH",    "HK",     "KH" ,    "KK"  ,   "WK")
 hybpopsp <- c("K", "H", "K", "K", "K", "HH", "HK", "KH", "KK", "H")
 hybcolr <- setNames(c(brewer.pal(3,"Greens")[3],brewer.pal(9,"Oranges")[5], brewer.pal(9,"Set1")[7], brewer.pal(3,"Purples")[3]),levels(sv$SpeciesR))
+hyblabs <- c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri")))
 ```
 
 ## Samples by plant population or type of hybrid cross
@@ -405,7 +408,7 @@ ngfvolhybn.top %>% mutate(variable=factor(variable, levels=boxplot.order)) %>%
   geom_point(data=tests.vols, aes(x=2.5, y=hyb.mean, shape="hybmean"), size=2)+
   scale_shape_manual("Mean",values=c(parmean=3, hybmean=5), labels=c(parmean="Species", hybmean="Hybrids"))+
   facet_wrap(vars(variable), scales="free_y", ncol=4, labeller = labeller(variable = label_wrap_gen(18))) +
-  scale_color_manual("", values=hybcolr) +
+  scale_color_manual("", values=hybcolr, labels=hyblabs) +
   scale_y_sqrt("Emission rate (ng/flower/hr)", limits=c(0,NA)) + theme_minimal() + 
   theme(axis.text.x=element_blank(), axis.title.x=element_blank(), 
         panel.grid.major.x=element_blank(), panel.grid.minor.y=element_blank(), legend.position = "top")
@@ -427,7 +430,7 @@ ngfvolhybn.top %>% filter(variable %in% names(diversity_vars)) %>%
   geom_point(data=tests.diversity, aes(x=2.5, y=hyb.mean, shape="hybmean"), size=2)+
   scale_shape_manual("Mean",values=c(parmean=3, hybmean=5), labels=c(parmean="Species", hybmean="Hybrids"))+
   facet_wrap(vars(variable), scales="free_y", ncol=4, labeller = as_labeller(diversity_vars)) +
-  scale_color_manual("", values=hybcolr) + 
+  scale_color_manual("", values=hybcolr, labels=hyblabs) + 
   scale_y_continuous("", limits=c(0,NA)) + theme_minimal() + 
   theme(axis.text.x=element_blank(), axis.title.x=element_blank(), 
         panel.grid.major.x=element_blank(), panel.grid.minor.y=element_blank(), legend.position = "top")
@@ -469,7 +472,7 @@ hybnplot <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) +
     guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=3)))
 
 (hybplotn.spec <- hybnplot + 
-        scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+        scale_fill_manual("", values=hybcolr, labels=hyblabs,  na.translate=F) +
   geom_point(data=obj[obj$score=="sites",], aes(fill=SpeciesR), shape=21, size=3, color="white") +
     geom_text(data=obj[obj$score=="species" & obj$ftotal>1.5e4 & obj$occur>nrow(volhybn)*0.20,], aes(label=label), color="black", size=3.8) ) 
 ```
@@ -480,7 +483,9 @@ hybnplot <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) +
 volhybn.mean <- volhybn %>% mutate(Sample = svhybn$Sample) %>% 
   left_join(dplyr::select(svhybn, c(Sample, SpeciesR, plants, parents, plantsi))) %>% 
   mutate_if(is.character, as.factor) %>% 
- group_by(SpeciesR, plants, parents, plantsi) %>% summarize_if(is.numeric, mean)
+ group_by(SpeciesR, plants, plantsi) %>% summarize_if(is.numeric, mean) 
+#TODO temporarily got rid of parents since it was splitting multiple inflos on same plant
+#TODO should take the mean by plant before most analyses
 
 volhybn.mean.vols <- volhybn.mean %>% ungroup %>% select_if(is.numeric)
 set.seed(1)
@@ -490,7 +495,7 @@ mdshybn.mean
 obj.mean <- fortify(mdshybn.mean)
 obj.mean$SpeciesR <- factor(NA,levels=levels(volhybn.mean$SpeciesR)); obj.mean$SpeciesR[obj.mean$score=="sites"] <-  volhybn.mean$SpeciesR
 obj.mean$plants <- factor(NA,levels=levels(volhybn.mean$plants)); obj.mean$plants[obj.mean$score=="sites"] <-  volhybn.mean$plants
-obj.mean$parents <- factor(NA,levels=levels(volhybn.mean$parents)); obj.mean$parents[obj.mean$score=="sites"] <-  volhybn.mean$parents
+#obj.mean$parents <- factor(NA,levels=levels(volhybn.mean$parents)); obj.mean$parents[obj.mean$score=="sites"] <-  volhybn.mean$parents
 obj.mean$occur <- NA; obj.mean$occur[obj.mean$score=="species"] <- colSums(pavolhyb[svhyb$DN=="Night",])
 obj.mean$ftotal <- NA; obj.mean$ftotal[obj.mean$score=="species"] <- colSums(fvolhyb[svhyb$DN=="Night",])
 obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
@@ -503,10 +508,10 @@ obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
     scale_x_continuous(expand=c(0,0))+
     theme(legend.text = element_text(size=13)) + 
     guides(fill = guide_legend(override.aes = list(size=5)), color=guide_legend(override.aes=list(size=3)))+
-    scale_fill_manual("", values=hybcolr, labels=c(expression(italic("S. kaalae")),"K x H", "H x K", expression(italic("S. hookeri"))),  na.translate=F) +
+    scale_fill_manual("", values=hybcolr, labels=hyblabs,  na.translate=F) +
       scale_color_manual("",breaks=c("cross","parents"), labels=c("Cross","Clone"), values=c(cross="grey90", parents="grey60")) +
     geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=plants, color="cross"), size=1) +
-    geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=parents, color="parents"), size=1) +
+    #geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=parents, color="parents"), size=1) +
     geom_point(data=obj.mean[obj.mean$score=="sites",], aes(fill=SpeciesR), shape=21, size=2.5, color="white") +
     geom_text(data=obj.mean[obj.mean$score=="species" & obj.mean$ftotal>1.5e4 & obj.mean$occur>nrow(volhybn)*0.20,], aes(label=label), color="black",  alpha=1, size=3.8) 
     ) 
@@ -514,18 +519,28 @@ obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
 
 # Variation at different levels
 
-## Variation within plants
+## Variation among infloresences within plants
+
+To measure between-trap variation, two traps were inserted into one bag, for two bags enclosing two infloresences on one plant (four traps total). Average them to get a dataset of unique infloresences.
 
 ```{r withinplant}
-bd.plantsi <-  betadisper(vegdist(decostand(volhybn, method="hellinger"), method="bray"), 
-                           group = svhybn$plantsi)
-meandist.plantsi <- bd.plantsi$group.distances %>% enframe(name="plantsi", value="centroid_dist") %>%
+volhybn.inflo <- volhybn %>% mutate(Sample = svhybn$Sample) %>% 
+  left_join(dplyr::select(svhybn, c(Sample, SpeciesR, plants, parents, plantsi, Inflo, SampleDate))) %>% 
+  mutate_if(is.character, as.factor) %>% 
+ group_by(SpeciesR, plants, plantsi, Inflo, SampleDate) %>% #Inflos are marked by a letter but those are reused arbitrarily  across dates
+  summarize_if(is.numeric, mean)
+volhybn.inflo.vols <- volhybn.inflo %>% ungroup %>% select_if(is.numeric)
+
+bd.plantsi.inflo <-  betadisper(vegdist(decostand(volhybn.inflo.vols, method="hellinger"), method="bray"), 
+                           group = volhybn.inflo$plantsi)
+meandist.plantsi.inflo <- bd.plantsi.inflo$group.distances %>% enframe(name="plantsi", value="centroid_dist") %>%
   left_join(count(svhybn, plantsi)) %>% filter(n>1)#plants with resamples
-summary(meandist.plantsi$centroid_dist)
+summary(meandist.plantsi.inflo$centroid_dist)
 ```
 
 ## Variation among plants in each cross type
-```{r amongplant}
+
+```{r amongplant, fig.width=5, fig.height=4}
 #betadisper(vegdist(decostand(volhybn, method="hellinger"), method="bray"), group = specpn) #sample level
 (bd.SpeciesR <- betadisper(vegdist(decostand(volhybn.mean.vols, method="hellinger"), method="bray"), 
                            group = volhybn.mean$SpeciesR))
@@ -533,9 +548,12 @@ anova(bd.SpeciesR)
 TukeyHSD(bd.SpeciesR)
 
 tibble(group=bd.SpeciesR$group, distance = bd.SpeciesR$distances) %>% 
-  bind_rows(bd.plantsi$distances %>% enframe(name="plantsi", value="distance") %>%
-  left_join(count(svhybn, plantsi)) %>% filter(distance!=0) %>% mutate(group="Within plant")) %>% 
-  ggplot(aes(x=group, y=distance, color=group)) + geom_boxplot() + scale_color_manual(values=hybcolr, guide="none") +
-  theme_classic() + labs(x="", y="Distance to centroid")
+  bind_rows(bd.plantsi.inflo$distances %>% enframe(value="distance") %>% filter(distance!=0) %>% mutate(group="within")) %>%
+  mutate(group = fct_relevel(group, c(levels(sv$SpeciesR), "within"))) %>% 
+  ggplot(aes(x=group, y=distance, color=group)) +
+  geom_boxplot(outlier.shape = NA) + geom_jitter(width=0.15, height=0) + geom_vline(xintercept = 4.5) + 
+  scale_color_manual(values=hybcolr, guide="none") + 
+  scale_y_continuous(limits=c(0,NA), expand = expansion(c(0,0.05))) + scale_x_discrete(labels=c(hyblabs, "Within plant")) + 
+  theme_classic() + theme(axis.title.x=element_blank(), axis.ticks.x=element_blank()) + labs(y="Bray-Curtis distance to centroid") 
 ```
 
