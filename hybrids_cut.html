@@ -717,8 +717,8 @@ kable(plants.parent, caption=&quot;parent plants&quot;)</code></pre>
 <h1>Heatmap</h1>
 <pre class="r"><code>#1 dimensional NMDS for ordering samples in heatmap
 set.seed(1)
-mdshybn1 &lt;- metaMDS(decostand(fvolhybn, method=&quot;hellinger&quot;),k=1,try=200, autotransform=F, trace=0)
-srt &lt;- order(svhybn$SpeciesR, -mdshybn1$points, decreasing=T)
+mdshybn1 &lt;- metaMDS(decostand(fvolhybn.plants, method=&quot;hellinger&quot;),k=1,try=200, autotransform=F, trace=0)
+srt &lt;- order(svhybn.plants$SpeciesR, -mdshybn1$points, decreasing=T)
 
 #Include volatiles found in at least this many samples
 mincount &lt;- 15
@@ -728,18 +728,20 @@ callback = function(hc, mat){
     dend = reorder(as.dendrogram(hc), wts = sv)
     as.hclust(dend)
 }
-pheatmap(as.matrix(t(fvolhybn[,colSums(pavolhybn)&gt;mincount][srt,]))^(1/3), 
+heat.mat &lt;- as.matrix(t(fvolhybn.plants[,colSums(pavolhybn)&gt;mincount][srt,]))^(1/3)
+colnames(heat.mat) &lt;- rownames(fvolhybn.plants)[srt]
+pheatmap(heat.mat, 
          cluster_cols=F, show_colnames=F,
          clustering_method=&quot;mcquitty&quot;, clustering_distance_rows=&quot;correlation&quot;,
          clustering_callback = function(hc, ...){dendsort(hc, type=&quot;average&quot;)},
          scale=&quot;none&quot;, color=inferno(512),
-         annotation_col = data.frame(Species=as.integer(svhybn$SpeciesR)[srt], row.names=rownames(fvolhybn)[srt]), 
+         annotation_col = data.frame(Species=as.integer(svhybn.plants$SpeciesR)[srt], row.names=rownames(fvolhybn.plants)[srt]), 
          annotation_colors = list(Species=hybcolr), 
-         gaps_col = which(as.logical(diff(as.integer(svhybn$SpeciesR)[srt]))),
+         gaps_col = which(as.logical(diff(as.integer(svhybn.plants$SpeciesR)[srt]))),
    cellwidth = 3.5, cellheight = 14, fontsize = 10, border_color = NA, legend=F, legend_breaks=NA, annotation_legend=F, cutree_rows=5
 )
-grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=c(0.165,0.54),y=0.964, gp=gpar(fontsize=10, col=&quot;white&quot;, fontface=4))
-grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.317,0.417),y=0.964, gp=gpar(fontsize=10, col=&quot;white&quot;, fontface=2))</code></pre>
+grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=c(0.185,0.5),y=0.964, gp=gpar(fontsize=10, col=&quot;white&quot;, fontface=4))
+grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.323,0.405),y=0.964, gp=gpar(fontsize=10, col=&quot;white&quot;, fontface=2))</code></pre>
 <p><img src="hybrids_cut_plots/heatmap-1.png" width="1008" /></p>
 </div>
 <div id="boxplots-of-each-volatile" class="section level1">
@@ -747,18 +749,19 @@ grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.317,0.417),y=0.964, gp=gpar
 <pre class="r"><code>diversity_vars &lt;- c(ftot = &quot;Total volatile emissions (ng/flr/hr)&quot;, 
                     num_compounds=&quot;Number of compounds&quot;, 
                     shannon=&quot;Shannon diversity index&quot;)
-svhybn$num_compounds &lt;- rowSums(pavolhybn)
-svhybn$shannon &lt;- diversity(fvolhybn, index=&quot;shannon&quot;)
+svhybn.plants$ftot &lt;- rowSums(fvolhybn.plants)
+svhybn.plants$num_compounds &lt;- rowSums(decostand(fvolhybn.plants, method=&quot;pa&quot;))
+svhybn.plants$shannon &lt;- diversity(fvolhybn.plants, index=&quot;shannon&quot;)
 
 multiline &lt;- c(&quot;DMNT&quot;=&quot;(3E)-4,8-dimethylnona-1,3,7-triene&quot;,
                &quot;2,2,6-trimethylcyclohexane-\n1,4-dione&quot;=&quot;2,2,6-trimethylcyclohexane-1,4-dione&quot;,
                &quot;4-hydroxy-2,6,6-trimethyl-\n3-oxocyclohexene-\n1-carbaldehyde&quot;=
                  &quot;4-hydroxy-2,6,6-trimethyl-3-oxocyclohexene-1-carbaldehyde&quot;)
 
-minprop &lt;- 0.2 #compound must occur in greater than this proportion of evening samples
-fvolhybn.top &lt;- fvolhybn %&gt;% 
+minprop &lt;- 0.25 #compound must occur in greater than this proportion of evening samples
+fvolhybn.top &lt;- fvolhybn.plants %&gt;% 
   select(where(~sum(.x&gt;0) &gt; length(.x) * minprop)) %&gt;% 
-  bind_cols(select(svhybn, Species=SpeciesR, all_of(names(diversity_vars)))) %&gt;% 
+  bind_cols(select(svhybn.plants, Species=SpeciesR, all_of(names(diversity_vars)))) %&gt;% 
   pivot_longer(!Species, names_to=&quot;variable&quot;) %&gt;% 
   mutate(variable = fct_recode(variable, !!!multiline))
 
@@ -820,268 +823,268 @@ tests.vols %&gt;% select(-c(maximum, hyb.index)) %&gt;% mutate(variable=str_remo
 <tbody>
 <tr class="odd">
 <td align="left">benzaldehyde</td>
-<td align="right">0.074</td>
-<td align="right">0.032</td>
-<td align="right">0.046</td>
-<td align="right">0.304</td>
-<td align="right">0.189</td>
-<td align="right">0.039</td>
-<td align="right">0.831</td>
-<td align="right">0.000</td>
+<td align="right">0.079</td>
+<td align="right">0.033</td>
+<td align="right">0.041</td>
+<td align="right">0.311</td>
+<td align="right">0.195</td>
+<td align="right">0.037</td>
+<td align="right">0.915</td>
+<td align="right">0.001</td>
 </tr>
 <tr class="even">
 <td align="left">octan-3-one</td>
-<td align="right">0.435</td>
-<td align="right">0.802</td>
-<td align="right">1.115</td>
-<td align="right">0.697</td>
-<td align="right">0.566</td>
-<td align="right">0.959</td>
-<td align="right">0.384</td>
-<td align="right">0.074</td>
+<td align="right">0.454</td>
+<td align="right">0.839</td>
+<td align="right">1.183</td>
+<td align="right">0.709</td>
+<td align="right">0.581</td>
+<td align="right">1.011</td>
+<td align="right">0.398</td>
+<td align="right">0.084</td>
 </tr>
 <tr class="odd">
 <td align="left">4-oxoisophorone</td>
-<td align="right">0.128</td>
+<td align="right">0.132</td>
 <td align="right">0.003</td>
-<td align="right">0.016</td>
+<td align="right">0.009</td>
 <td align="right">0.000</td>
-<td align="right">0.064</td>
-<td align="right">0.010</td>
-<td align="right">0.708</td>
-<td align="right">0.013</td>
+<td align="right">0.066</td>
+<td align="right">0.006</td>
+<td align="right">0.884</td>
+<td align="right">0.017</td>
 </tr>
 <tr class="even">
 <td align="left">indole</td>
 <td align="right">0.002</td>
-<td align="right">0.029</td>
-<td align="right">0.017</td>
-<td align="right">0.147</td>
-<td align="right">0.074</td>
-<td align="right">0.023</td>
-<td align="right">0.706</td>
-<td align="right">0.010</td>
+<td align="right">0.031</td>
+<td align="right">0.016</td>
+<td align="right">0.137</td>
+<td align="right">0.070</td>
+<td align="right">0.024</td>
+<td align="right">0.634</td>
+<td align="right">0.021</td>
 </tr>
 <tr class="odd">
 <td align="left">2-phenylacetaldehyde</td>
-<td align="right">0.272</td>
-<td align="right">0.005</td>
-<td align="right">0.005</td>
+<td align="right">0.297</td>
 <td align="right">0.006</td>
-<td align="right">0.139</td>
+<td align="right">0.004</td>
+<td align="right">0.006</td>
+<td align="right">0.151</td>
 <td align="right">0.005</td>
-<td align="right">0.999</td>
-<td align="right">0.178</td>
+<td align="right">0.994</td>
+<td align="right">0.208</td>
 </tr>
 <tr class="even">
 <td align="left">methyl 2-aminobenzoate</td>
 <td align="right">0.000</td>
-<td align="right">0.019</td>
-<td align="right">0.003</td>
-<td align="right">0.084</td>
-<td align="right">0.042</td>
-<td align="right">0.011</td>
-<td align="right">0.559</td>
-<td align="right">0.056</td>
+<td align="right">0.020</td>
+<td align="right">0.005</td>
+<td align="right">0.086</td>
+<td align="right">0.043</td>
+<td align="right">0.012</td>
+<td align="right">0.588</td>
+<td align="right">0.086</td>
 </tr>
 <tr class="odd">
 <td
 align="left">4-hydroxy-2,6,6-trimethyl-3-oxocyclohexene-1-carbaldehyde</td>
 <td align="right">0.027</td>
 <td align="right">0.001</td>
-<td align="right">0.002</td>
+<td align="right">0.001</td>
 <td align="right">0.001</td>
 <td align="right">0.014</td>
-<td align="right">0.002</td>
-<td align="right">0.922</td>
-<td align="right">0.033</td>
+<td align="right">0.001</td>
+<td align="right">0.989</td>
+<td align="right">0.031</td>
 </tr>
 <tr class="even">
 <td align="left">DMNT</td>
 <td align="right">0.001</td>
 <td align="right">0.000</td>
 <td align="right">0.006</td>
-<td align="right">0.094</td>
-<td align="right">0.047</td>
+<td align="right">0.091</td>
+<td align="right">0.046</td>
 <td align="right">0.003</td>
-<td align="right">0.835</td>
-<td align="right">0.009</td>
+<td align="right">0.856</td>
+<td align="right">0.024</td>
 </tr>
 <tr class="odd">
 <td align="left">2,2,6-trimethylcyclohexane-1,4-dione</td>
-<td align="right">0.054</td>
+<td align="right">0.056</td>
 <td align="right">0.000</td>
-<td align="right">0.002</td>
-<td align="right">0.000</td>
-<td align="right">0.027</td>
 <td align="right">0.001</td>
-<td align="right">0.926</td>
-<td align="right">0.005</td>
+<td align="right">0.000</td>
+<td align="right">0.028</td>
+<td align="right">0.001</td>
+<td align="right">0.976</td>
+<td align="right">0.006</td>
 </tr>
 <tr class="even">
 <td align="left">propylcyclopropane</td>
-<td align="right">0.025</td>
-<td align="right">0.038</td>
-<td align="right">0.014</td>
-<td align="right">0.082</td>
-<td align="right">0.053</td>
-<td align="right">0.026</td>
-<td align="right">0.549</td>
-<td align="right">0.257</td>
+<td align="right">0.022</td>
+<td align="right">0.041</td>
+<td align="right">0.013</td>
+<td align="right">0.088</td>
+<td align="right">0.055</td>
+<td align="right">0.027</td>
+<td align="right">0.544</td>
+<td align="right">0.317</td>
 </tr>
 <tr class="odd">
 <td align="left">3,5,5-trimethylhex-2-ene</td>
 <td align="right">0.003</td>
-<td align="right">0.082</td>
-<td align="right">0.116</td>
+<td align="right">0.085</td>
+<td align="right">0.146</td>
 <td align="right">0.190</td>
 <td align="right">0.097</td>
-<td align="right">0.099</td>
-<td align="right">0.678</td>
-<td align="right">0.959</td>
+<td align="right">0.116</td>
+<td align="right">0.514</td>
+<td align="right">0.738</td>
 </tr>
 <tr class="even">
 <td align="left">unknown benzenoid</td>
 <td align="right">0.003</td>
-<td align="right">0.045</td>
-<td align="right">0.050</td>
-<td align="right">0.269</td>
-<td align="right">0.136</td>
-<td align="right">0.048</td>
-<td align="right">0.940</td>
-<td align="right">0.040</td>
+<td align="right">0.046</td>
+<td align="right">0.032</td>
+<td align="right">0.240</td>
+<td align="right">0.121</td>
+<td align="right">0.039</td>
+<td align="right">0.840</td>
+<td align="right">0.047</td>
 </tr>
 <tr class="odd">
 <td align="left">oct-1-en-3-ol</td>
-<td align="right">3.167</td>
-<td align="right">5.867</td>
-<td align="right">5.884</td>
-<td align="right">3.380</td>
-<td align="right">3.274</td>
-<td align="right">5.875</td>
-<td align="right">0.993</td>
-<td align="right">0.024</td>
+<td align="right">3.202</td>
+<td align="right">6.101</td>
+<td align="right">6.170</td>
+<td align="right">3.506</td>
+<td align="right">3.354</td>
+<td align="right">6.135</td>
+<td align="right">0.974</td>
+<td align="right">0.033</td>
 </tr>
 <tr class="even">
 <td align="left">linalool oxide (pyranoid) ketone</td>
-<td align="right">4.817</td>
-<td align="right">2.165</td>
-<td align="right">3.217</td>
-<td align="right">0.080</td>
-<td align="right">2.448</td>
-<td align="right">2.691</td>
-<td align="right">0.257</td>
-<td align="right">0.667</td>
+<td align="right">4.956</td>
+<td align="right">2.194</td>
+<td align="right">2.972</td>
+<td align="right">0.086</td>
+<td align="right">2.521</td>
+<td align="right">2.583</td>
+<td align="right">0.452</td>
+<td align="right">0.921</td>
 </tr>
 <tr class="odd">
 <td align="left">linalool oxide (pyranoid)</td>
-<td align="right">3.978</td>
-<td align="right">0.289</td>
-<td align="right">0.675</td>
-<td align="right">0.022</td>
-<td align="right">2.000</td>
-<td align="right">0.482</td>
-<td align="right">0.579</td>
+<td align="right">4.035</td>
+<td align="right">0.288</td>
+<td align="right">0.427</td>
+<td align="right">0.024</td>
+<td align="right">2.030</td>
+<td align="right">0.358</td>
+<td align="right">0.856</td>
 <td align="right">0.000</td>
 </tr>
 <tr class="even">
 <td align="left">(E)-hex-3-enal</td>
 <td align="right">0.000</td>
-<td align="right">0.025</td>
-<td align="right">0.075</td>
-<td align="right">0.281</td>
+<td align="right">0.027</td>
+<td align="right">0.090</td>
+<td align="right">0.279</td>
 <td align="right">0.140</td>
-<td align="right">0.050</td>
-<td align="right">0.516</td>
-<td align="right">0.057</td>
+<td align="right">0.059</td>
+<td align="right">0.459</td>
+<td align="right">0.121</td>
 </tr>
 <tr class="odd">
 <td align="left">linalool oxide (furanoid)</td>
-<td align="right">2.126</td>
-<td align="right">0.248</td>
-<td align="right">0.375</td>
-<td align="right">0.018</td>
-<td align="right">1.072</td>
-<td align="right">0.311</td>
-<td align="right">0.692</td>
+<td align="right">2.134</td>
+<td align="right">0.257</td>
+<td align="right">0.326</td>
+<td align="right">0.020</td>
+<td align="right">1.077</td>
+<td align="right">0.292</td>
+<td align="right">0.841</td>
 <td align="right">0.000</td>
 </tr>
 <tr class="even">
 <td align="left">hexanal</td>
-<td align="right">0.560</td>
-<td align="right">0.309</td>
-<td align="right">0.486</td>
-<td align="right">0.796</td>
-<td align="right">0.678</td>
-<td align="right">0.398</td>
-<td align="right">0.343</td>
-<td align="right">0.015</td>
+<td align="right">0.595</td>
+<td align="right">0.322</td>
+<td align="right">0.489</td>
+<td align="right">0.805</td>
+<td align="right">0.700</td>
+<td align="right">0.406</td>
+<td align="right">0.428</td>
+<td align="right">0.023</td>
 </tr>
 <tr class="odd">
 <td align="left">(E)-hex-2-enal</td>
 <td align="right">0.000</td>
-<td align="right">0.034</td>
-<td align="right">0.046</td>
-<td align="right">0.346</td>
-<td align="right">0.173</td>
-<td align="right">0.040</td>
-<td align="right">0.876</td>
-<td align="right">0.006</td>
+<td align="right">0.037</td>
+<td align="right">0.050</td>
+<td align="right">0.355</td>
+<td align="right">0.178</td>
+<td align="right">0.043</td>
+<td align="right">0.886</td>
+<td align="right">0.014</td>
 </tr>
 <tr class="even">
 <td align="left">linalool</td>
-<td align="right">0.038</td>
+<td align="right">0.041</td>
 <td align="right">0.001</td>
-<td align="right">0.035</td>
-<td align="right">0.026</td>
-<td align="right">0.032</td>
-<td align="right">0.018</td>
-<td align="right">0.355</td>
-<td align="right">0.540</td>
+<td align="right">0.046</td>
+<td align="right">0.020</td>
+<td align="right">0.031</td>
+<td align="right">0.024</td>
+<td align="right">0.282</td>
+<td align="right">0.784</td>
 </tr>
 <tr class="odd">
 <td align="left">(Z)-hex-3-en-1-ol</td>
-<td align="right">0.050</td>
-<td align="right">1.236</td>
-<td align="right">2.178</td>
-<td align="right">5.900</td>
-<td align="right">2.975</td>
-<td align="right">1.707</td>
-<td align="right">0.611</td>
-<td align="right">0.262</td>
+<td align="right">0.053</td>
+<td align="right">1.238</td>
+<td align="right">2.377</td>
+<td align="right">5.913</td>
+<td align="right">2.983</td>
+<td align="right">1.807</td>
+<td align="right">0.565</td>
+<td align="right">0.330</td>
 </tr>
 <tr class="even">
 <td align="left">heptane-2,3-dione</td>
-<td align="right">0.004</td>
-<td align="right">0.221</td>
-<td align="right">0.209</td>
-<td align="right">0.465</td>
-<td align="right">0.234</td>
-<td align="right">0.215</td>
-<td align="right">0.942</td>
-<td align="right">0.850</td>
+<td align="right">0.003</td>
+<td align="right">0.237</td>
+<td align="right">0.158</td>
+<td align="right">0.392</td>
+<td align="right">0.198</td>
+<td align="right">0.198</td>
+<td align="right">0.524</td>
+<td align="right">1.000</td>
 </tr>
 <tr class="odd">
 <td align="left">α-phellandrene</td>
-<td align="right">0.354</td>
-<td align="right">0.031</td>
-<td align="right">0.025</td>
-<td align="right">0.015</td>
+<td align="right">0.355</td>
+<td align="right">0.033</td>
+<td align="right">0.020</td>
+<td align="right">0.016</td>
 <td align="right">0.185</td>
-<td align="right">0.028</td>
-<td align="right">0.960</td>
-<td align="right">0.026</td>
+<td align="right">0.027</td>
+<td align="right">0.922</td>
+<td align="right">0.043</td>
 </tr>
 <tr class="even">
 <td align="left">p-cymene</td>
-<td align="right">0.068</td>
+<td align="right">0.075</td>
 <td align="right">0.002</td>
-<td align="right">0.008</td>
-<td align="right">0.013</td>
-<td align="right">0.041</td>
 <td align="right">0.005</td>
-<td align="right">0.787</td>
-<td align="right">0.010</td>
+<td align="right">0.013</td>
+<td align="right">0.044</td>
+<td align="right">0.004</td>
+<td align="right">0.932</td>
+<td align="right">0.009</td>
 </tr>
 </tbody>
 </table>
@@ -1140,36 +1143,36 @@ tests.diversity %&gt;% select(-c(maximum, hyb.index)) %&gt;% kable(caption = &qu
 <tbody>
 <tr class="odd">
 <td align="left">ftot</td>
-<td align="right">16.676</td>
-<td align="right">11.774</td>
-<td align="right">15.190</td>
-<td align="right">15.159</td>
-<td align="right">15.918</td>
-<td align="right">13.482</td>
-<td align="right">0.474</td>
-<td align="right">0.401</td>
+<td align="right">17.036</td>
+<td align="right">12.131</td>
+<td align="right">15.204</td>
+<td align="right">15.147</td>
+<td align="right">16.091</td>
+<td align="right">13.667</td>
+<td align="right">0.555</td>
+<td align="right">0.444</td>
 </tr>
 <tr class="even">
 <td align="left">num_compounds</td>
-<td align="right">17.395</td>
-<td align="right">18.231</td>
-<td align="right">18.393</td>
-<td align="right">19.194</td>
-<td align="right">18.295</td>
-<td align="right">18.312</td>
-<td align="right">0.898</td>
-<td align="right">0.982</td>
+<td align="right">18.250</td>
+<td align="right">18.833</td>
+<td align="right">19.524</td>
+<td align="right">19.969</td>
+<td align="right">19.109</td>
+<td align="right">19.179</td>
+<td align="right">0.696</td>
+<td align="right">0.949</td>
 </tr>
 <tr class="odd">
 <td align="left">shannon</td>
-<td align="right">1.711</td>
-<td align="right">1.642</td>
-<td align="right">1.773</td>
-<td align="right">2.006</td>
-<td align="right">1.858</td>
-<td align="right">1.707</td>
-<td align="right">0.108</td>
-<td align="right">0.003</td>
+<td align="right">1.721</td>
+<td align="right">1.638</td>
+<td align="right">1.742</td>
+<td align="right">2.016</td>
+<td align="right">1.869</td>
+<td align="right">1.690</td>
+<td align="right">0.261</td>
+<td align="right">0.002</td>
 </tr>
 </tbody>
 </table>
@@ -1241,7 +1244,7 @@ hybnplot &lt;- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) +
 (hybplotn.spec &lt;- hybnplot + 
         scale_fill_manual(&quot;&quot;, values=hybcolr, labels=hyblabs,  na.translate=F) +
   geom_point(data=obj[obj$score==&quot;sites&quot;,], aes(fill=SpeciesR), shape=21, size=3, color=&quot;white&quot;) +
-    geom_text(data=obj[obj$score==&quot;species&quot; &amp; obj$ftotal&gt;1.5e4 &amp; obj$occur&gt;nrow(volhybn)*0.20,], aes(label=label), color=&quot;black&quot;, size=3.8) ) </code></pre>
+    geom_text(data=obj[obj$score==&quot;species&quot; &amp; obj$occur&gt;nrow(volhybn)*minprop,], aes(label=label), color=&quot;black&quot;, size=3.8) ) </code></pre>
 <p><img src="hybrids_cut_plots/2dnmdsnight-1.svg" width="1008" /></p>
 </div>
 <div id="mean-of-each-plant" class="section level2">
@@ -1270,7 +1273,7 @@ obj.mean$SpeciesR &lt;- factor(NA,levels=levels(svhybn.plants$SpeciesR)); obj.me
 obj.mean$plants &lt;- factor(NA,levels=unique(svhybn.plants$plants)); obj.mean$plants[obj.mean$score==&quot;sites&quot;] &lt;-  svhybn.plants$plants
 #obj.mean$parents &lt;- factor(NA,levels=levels(svhybn.plants$parents)); obj.mean$parents[obj.mean$score==&quot;sites&quot;] &lt;-  svhybn.plants$parents
 obj.mean$occur &lt;- NA; obj.mean$occur[obj.mean$score==&quot;species&quot;] &lt;- colSums(pavolhybn)
-obj.mean$ftotal &lt;- NA; obj.mean$ftotal[obj.mean$score==&quot;species&quot;] &lt;- colSums(fvolhybn)
+obj.mean$ftotal &lt;- NA; obj.mean$ftotal[obj.mean$score==&quot;species&quot;] &lt;- colSums(fvolhybn.plants)
 obj.mean &lt;- obj.mean %&gt;% arrange(NMDS2, NMDS1)
 
 (hybplotn.mean.spec &lt;- 
@@ -1286,7 +1289,7 @@ obj.mean &lt;- obj.mean %&gt;% arrange(NMDS2, NMDS1)
     geom_path(data=obj.mean[obj.mean$score==&quot;sites&quot;,],aes(group=plants, color=&quot;cross&quot;), size=1) +
     #geom_path(data=obj.mean[obj.mean$score==&quot;sites&quot;,],aes(group=parents, color=&quot;parents&quot;), size=1) +
     geom_point(data=obj.mean[obj.mean$score==&quot;sites&quot;,], aes(fill=SpeciesR), shape=21, size=2.5, color=&quot;white&quot;) +
-    geom_text(data=obj.mean[obj.mean$score==&quot;species&quot; &amp; obj.mean$ftotal&gt;1.5e4 &amp; obj.mean$occur&gt;nrow(volhybn)*0.20,], aes(label=label), color=&quot;black&quot;,  alpha=1, size=3.8) 
+    geom_text(data=obj.mean[obj.mean$score==&quot;species&quot; &amp; obj.mean$occur&gt;nrow(volhybn)*minprop,], aes(label=label), color=&quot;black&quot;,  alpha=1, size=3.8) 
     ) </code></pre>
 <p><img src="hybrids_cut_plots/2dnmdsnightmean-1.svg" width="1008" /></p>
 </div>

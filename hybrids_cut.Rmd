@@ -177,8 +177,8 @@ summary(as.numeric(svhybn$StartSunset))
 ```{r heatmap,  dev="png", dev.args=list(), fig.width=10.5, fig.height=7.6}
 #1 dimensional NMDS for ordering samples in heatmap
 set.seed(1)
-mdshybn1 <- metaMDS(decostand(fvolhybn, method="hellinger"),k=1,try=200, autotransform=F, trace=0)
-srt <- order(svhybn$SpeciesR, -mdshybn1$points, decreasing=T)
+mdshybn1 <- metaMDS(decostand(fvolhybn.plants, method="hellinger"),k=1,try=200, autotransform=F, trace=0)
+srt <- order(svhybn.plants$SpeciesR, -mdshybn1$points, decreasing=T)
 
 #Include volatiles found in at least this many samples
 mincount <- 15
@@ -188,18 +188,20 @@ callback = function(hc, mat){
     dend = reorder(as.dendrogram(hc), wts = sv)
     as.hclust(dend)
 }
-pheatmap(as.matrix(t(fvolhybn[,colSums(pavolhybn)>mincount][srt,]))^(1/3), 
+heat.mat <- as.matrix(t(fvolhybn.plants[,colSums(pavolhybn)>mincount][srt,]))^(1/3)
+colnames(heat.mat) <- rownames(fvolhybn.plants)[srt]
+pheatmap(heat.mat, 
          cluster_cols=F, show_colnames=F,
          clustering_method="mcquitty", clustering_distance_rows="correlation",
          clustering_callback = function(hc, ...){dendsort(hc, type="average")},
          scale="none", color=inferno(512),
-         annotation_col = data.frame(Species=as.integer(svhybn$SpeciesR)[srt], row.names=rownames(fvolhybn)[srt]), 
+         annotation_col = data.frame(Species=as.integer(svhybn.plants$SpeciesR)[srt], row.names=rownames(fvolhybn.plants)[srt]), 
          annotation_colors = list(Species=hybcolr), 
-         gaps_col = which(as.logical(diff(as.integer(svhybn$SpeciesR)[srt]))),
+         gaps_col = which(as.logical(diff(as.integer(svhybn.plants$SpeciesR)[srt]))),
    cellwidth = 3.5, cellheight = 14, fontsize = 10, border_color = NA, legend=F, legend_breaks=NA, annotation_legend=F, cutree_rows=5
 )
-grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=c(0.165,0.54),y=0.964, gp=gpar(fontsize=10, col="white", fontface=4))
-grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.317,0.417),y=0.964, gp=gpar(fontsize=10, col="white", fontface=2))
+grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=c(0.185,0.5),y=0.964, gp=gpar(fontsize=10, col="white", fontface=4))
+grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.323,0.405),y=0.964, gp=gpar(fontsize=10, col="white", fontface=2))
 ```
 
 # Boxplots of each volatile
@@ -208,18 +210,19 @@ grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.317,0.417),y=0.964, gp=gpar
 diversity_vars <- c(ftot = "Total volatile emissions (ng/flr/hr)", 
                     num_compounds="Number of compounds", 
                     shannon="Shannon diversity index")
-svhybn$num_compounds <- rowSums(pavolhybn)
-svhybn$shannon <- diversity(fvolhybn, index="shannon")
+svhybn.plants$ftot <- rowSums(fvolhybn.plants)
+svhybn.plants$num_compounds <- rowSums(decostand(fvolhybn.plants, method="pa"))
+svhybn.plants$shannon <- diversity(fvolhybn.plants, index="shannon")
 
 multiline <- c("DMNT"="(3E)-4,8-dimethylnona-1,3,7-triene",
                "2,2,6-trimethylcyclohexane-\n1,4-dione"="2,2,6-trimethylcyclohexane-1,4-dione",
                "4-hydroxy-2,6,6-trimethyl-\n3-oxocyclohexene-\n1-carbaldehyde"=
                  "4-hydroxy-2,6,6-trimethyl-3-oxocyclohexene-1-carbaldehyde")
 
-minprop <- 0.2 #compound must occur in greater than this proportion of evening samples
-fvolhybn.top <- fvolhybn %>% 
+minprop <- 0.25 #compound must occur in greater than this proportion of evening samples
+fvolhybn.top <- fvolhybn.plants %>% 
   select(where(~sum(.x>0) > length(.x) * minprop)) %>% 
-  bind_cols(select(svhybn, Species=SpeciesR, all_of(names(diversity_vars)))) %>% 
+  bind_cols(select(svhybn.plants, Species=SpeciesR, all_of(names(diversity_vars)))) %>% 
   pivot_longer(!Species, names_to="variable") %>% 
   mutate(variable = fct_recode(variable, !!!multiline))
 
@@ -333,7 +336,7 @@ hybnplot <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) +
 (hybplotn.spec <- hybnplot + 
         scale_fill_manual("", values=hybcolr, labels=hyblabs,  na.translate=F) +
   geom_point(data=obj[obj$score=="sites",], aes(fill=SpeciesR), shape=21, size=3, color="white") +
-    geom_text(data=obj[obj$score=="species" & obj$ftotal>1.5e4 & obj$occur>nrow(volhybn)*0.20,], aes(label=label), color="black", size=3.8) ) 
+    geom_text(data=obj[obj$score=="species" & obj$occur>nrow(volhybn)*minprop,], aes(label=label), color="black", size=3.8) ) 
 ```
 
 ## Mean of each plant
@@ -348,7 +351,7 @@ obj.mean$SpeciesR <- factor(NA,levels=levels(svhybn.plants$SpeciesR)); obj.mean$
 obj.mean$plants <- factor(NA,levels=unique(svhybn.plants$plants)); obj.mean$plants[obj.mean$score=="sites"] <-  svhybn.plants$plants
 #obj.mean$parents <- factor(NA,levels=levels(svhybn.plants$parents)); obj.mean$parents[obj.mean$score=="sites"] <-  svhybn.plants$parents
 obj.mean$occur <- NA; obj.mean$occur[obj.mean$score=="species"] <- colSums(pavolhybn)
-obj.mean$ftotal <- NA; obj.mean$ftotal[obj.mean$score=="species"] <- colSums(fvolhybn)
+obj.mean$ftotal <- NA; obj.mean$ftotal[obj.mean$score=="species"] <- colSums(fvolhybn.plants)
 obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
 
 (hybplotn.mean.spec <- 
@@ -364,7 +367,7 @@ obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
     geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=plants, color="cross"), size=1) +
     #geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=parents, color="parents"), size=1) +
     geom_point(data=obj.mean[obj.mean$score=="sites",], aes(fill=SpeciesR), shape=21, size=2.5, color="white") +
-    geom_text(data=obj.mean[obj.mean$score=="species" & obj.mean$ftotal>1.5e4 & obj.mean$occur>nrow(volhybn)*0.20,], aes(label=label), color="black",  alpha=1, size=3.8) 
+    geom_text(data=obj.mean[obj.mean$score=="species" & obj.mean$occur>nrow(volhybn)*minprop,], aes(label=label), color="black",  alpha=1, size=3.8) 
     ) 
 ```
 

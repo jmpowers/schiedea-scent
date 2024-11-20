@@ -86,7 +86,8 @@ volhyb <- vol[f,]
 volhyb <- volhyb[order(as.integer(specp)),]
 specp <- sort(specp)
 svhyb <- sv[rownames(volhyb),]
-volhyb <- volhyb[order(as.integer(specp), svhyb$Population),]
+#volhyb <- volhyb[order(as.integer(specp), svhyb$Population),] 
+#the line above was making volhyb and svhyb not match, until fixed with "new consolidated code"
 volhyb <- volhyb[,colSums(volhyb)>0]
 pavolhyb <- volhyb
 pavolhyb[pavolhyb>0] <-1
