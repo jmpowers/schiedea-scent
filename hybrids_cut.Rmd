@@ -39,6 +39,11 @@ knitr::opts_chunk$set(comment="", cache=T, warning = F, message = F,
                       fig.path = "hybrids_cut_plots/", dev="svglite", dev.args=list(fix_text_size=FALSE))
 ```
 
+```{r figures, eval=FALSE}
+figs <- list.files("./hybrids_cut_plots", pattern=".svg")
+walk(figs, ~system(paste0("inkscape --export-dpi 150 -o ./hybrids_cut_plots/png/", str_replace(.x, ".svg",".png"), " ./hybrids_cut_plots/", .x)))
+```
+
 # Sample inventory
 
 ```{r load_scents}
@@ -174,7 +179,7 @@ summary(as.numeric(svhybn$StartSunset))
 
 # Heatmap
 
-```{r heatmap,  dev="png", dev.args=list(), fig.width=10.5, fig.height=7.6}
+```{r heatmap, dev="png", dev.args=list(), fig.width=10.5, fig.height=7.6}
 #1 dimensional NMDS for ordering samples in heatmap
 set.seed(1)
 mdshybn1 <- metaMDS(decostand(fvolhybn.plants, method="hellinger"),k=1,try=200, autotransform=F, trace=0)
@@ -190,18 +195,20 @@ callback = function(hc, mat){
 }
 heat.mat <- as.matrix(t(fvolhybn.plants[,colSums(pavolhybn)>mincount][srt,]))^(1/3)
 colnames(heat.mat) <- rownames(fvolhybn.plants)[srt]
-pheatmap(heat.mat, 
+ph <- pheatmap(heat.mat, 
          cluster_cols=F, show_colnames=F,
          clustering_method="mcquitty", clustering_distance_rows="correlation",
          clustering_callback = function(hc, ...){dendsort(hc, type="average")},
          scale="none", color=inferno(512),
          annotation_col = data.frame(Species=as.integer(svhybn.plants$SpeciesR)[srt], row.names=rownames(fvolhybn.plants)[srt]), 
-         annotation_colors = list(Species=hybcolr), 
+         annotation_colors = list(Species=hybcolr), annotation_names_col = F,
          gaps_col = which(as.logical(diff(as.integer(svhybn.plants$SpeciesR)[srt]))),
    cellwidth = 3.5, cellheight = 14, fontsize = 10, border_color = NA, legend=F, legend_breaks=NA, annotation_legend=F, cutree_rows=5
 )
-grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=c(0.185,0.5),y=0.964, gp=gpar(fontsize=10, col="white", fontface=4))
-grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.323,0.405),y=0.964, gp=gpar(fontsize=10, col="white", fontface=2))
+downViewport("col_annotation.3-3-3-3")
+middles <- enframe(svhybn.plants$SpeciesR[srt]) %>% mutate(name=(name-0.5)/max(name-0.5)) %>% summarize(name=mean(name), .by=value) %>% pull(name)
+grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=middles[c(1,4)],y=0.57, gp=gpar(fontsize=10, col="white", fontface=4))
+grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=middles[c(2,3)],y=0.57, gp=gpar(fontsize=10, col="white", fontface=2))
 ```
 
 # Boxplots of each volatile
@@ -275,6 +282,28 @@ fvolhybn.top %>% mutate(variable=factor(variable, levels=boxplot.order)) %>%
   theme(axis.text.x=element_blank(), axis.title.x=element_blank(), 
         panel.grid.major.x=element_blank(), panel.grid.minor.y=element_blank(), legend.position = "top")
 ```
+
+## Hybrid additivity vs. differences between parents 
+
+```{r hyb_combo, fig.height=7, fig.width=7}
+library(ggrepel)
+vol_floor <- 1e-5 #avoid negative estimates, 10x less than smallest positive estimate
+tests.vols %>%  mutate(lfc_species = log2(pmax(`S. kaalae`,vol_floor)/pmax(`S. hookeri`,vol_floor)), 
+                       lfc_hybrids = log2(hyb.mean/par.mean)) %>% ungroup() %>% 
+  left_join(chemsf %>% mutate(variable=fct_recode(Name, !!!multiline))) %>% 
+  mutate(Class = Class %>% str_remove("s$") %>% 
+           recode("Irregular terpene"="Other terpenoid", "Monoterpene"="Monoterpenoid") %>% factor()) %>% 
+  ggplot(aes(x=lfc_species, y=lfc_hybrids, color=Class)) + 
+  geom_vline(xintercept=0, color="grey40") + geom_hline(yintercept=0, color="grey40") + 
+  geom_point(aes(shape = parmean.p.value < 0.05), size=2.5) + scale_shape_manual(values=c(1,19), guide="none")+
+  geom_text_repel(aes(label=variable), size=3.5, min.segment.length=5, show.legend = F)  +
+  scale_color_manual(values=c("#BC0060","#027B8C","#5d9400","#E56E00")) +
+  scale_x_continuous(expand=expansion(c(0.1, 0.25)))+ 
+  theme_minimal() + theme(panel.grid.minor = element_blank(), legend.position = "top") +
+  labs(x="log2 fold change in emissions between parents (S. kaalae / S. hookeri)",
+       y="log2 fold change in emissions between hybrids and mean of parents",color="")
+```
+
 
 # Total emissions and diversity
 
@@ -369,6 +398,12 @@ obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
     geom_point(data=obj.mean[obj.mean$score=="sites",], aes(fill=SpeciesR), shape=21, size=2.5, color="white") +
     geom_text(data=obj.mean[obj.mean$score=="species" & obj.mean$occur>nrow(volhybn)*minprop,], aes(label=label), color="black",  alpha=1, size=3.8) 
     ) 
+```
+
+## Direction of cross PERMANOVA
+```{r permanova}
+hybridf.plants <- svhybn.plants$SpeciesR %in% c("K x H", "H x K")
+adonis2(decostand(fvolhybn.plants[hybridf.plants,], method="total")~ SpeciesR, data = svhybn[hybridf.plants,])
 ```
 
 # Variation at different levels

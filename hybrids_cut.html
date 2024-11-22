@@ -11,7 +11,7 @@
 
 <meta name="author" content="John Powers" />
 
-<meta name="date" content="2024-11-19" />
+<meta name="date" content="2024-11-21" />
 
 <title>Floral scent of Schiedea kaalae x hookeri hybrids</title>
 
@@ -254,7 +254,7 @@ div.tocify {
 hookeri</em> hybrids</h1>
 <h4 class="author"><a href="http://sites.uci.edu/powers/">John
 Powers</a></h4>
-<h4 class="date">2024-11-19</h4>
+<h4 class="date">2024-11-21</h4>
 
 </div>
 
@@ -264,6 +264,8 @@ Powers</a></h4>
 img{ max-width:200%; height: auto; }
 td, th { padding : 6px }
 </style>
+<pre class="r"><code>figs &lt;- list.files(&quot;./hybrids_cut_plots&quot;, pattern=&quot;.svg&quot;)
+walk(figs, ~system(paste0(&quot;inkscape --export-dpi 150 -o ./hybrids_cut_plots/png/&quot;, str_replace(.x, &quot;.svg&quot;,&quot;.png&quot;), &quot; ./hybrids_cut_plots/&quot;, .x)))</code></pre>
 <div id="sample-inventory" class="section level1">
 <h1>Sample inventory</h1>
 <pre class="r"><code>#Load filtered scent data (includes octenol and hexenol) and metadata
@@ -730,18 +732,20 @@ callback = function(hc, mat){
 }
 heat.mat &lt;- as.matrix(t(fvolhybn.plants[,colSums(pavolhybn)&gt;mincount][srt,]))^(1/3)
 colnames(heat.mat) &lt;- rownames(fvolhybn.plants)[srt]
-pheatmap(heat.mat, 
+ph &lt;- pheatmap(heat.mat, 
          cluster_cols=F, show_colnames=F,
          clustering_method=&quot;mcquitty&quot;, clustering_distance_rows=&quot;correlation&quot;,
          clustering_callback = function(hc, ...){dendsort(hc, type=&quot;average&quot;)},
          scale=&quot;none&quot;, color=inferno(512),
          annotation_col = data.frame(Species=as.integer(svhybn.plants$SpeciesR)[srt], row.names=rownames(fvolhybn.plants)[srt]), 
-         annotation_colors = list(Species=hybcolr), 
+         annotation_colors = list(Species=hybcolr), annotation_names_col = F,
          gaps_col = which(as.logical(diff(as.integer(svhybn.plants$SpeciesR)[srt]))),
    cellwidth = 3.5, cellheight = 14, fontsize = 10, border_color = NA, legend=F, legend_breaks=NA, annotation_legend=F, cutree_rows=5
 )
-grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=c(0.185,0.5),y=0.964, gp=gpar(fontsize=10, col=&quot;white&quot;, fontface=4))
-grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=c(0.323,0.405),y=0.964, gp=gpar(fontsize=10, col=&quot;white&quot;, fontface=2))</code></pre>
+downViewport(&quot;col_annotation.3-3-3-3&quot;)
+middles &lt;- enframe(svhybn.plants$SpeciesR[srt]) %&gt;% mutate(name=(name-0.5)/max(name-0.5)) %&gt;% summarize(name=mean(name), .by=value) %&gt;% pull(name)
+grid.text(rev(levels(svhyb$SpeciesR))[c(1,4)], x=middles[c(1,4)],y=0.57, gp=gpar(fontsize=10, col=&quot;white&quot;, fontface=4))
+grid.text(rev(levels(svhyb$SpeciesR))[c(2,3)], x=middles[c(2,3)],y=0.57, gp=gpar(fontsize=10, col=&quot;white&quot;, fontface=2))</code></pre>
 <p><img src="hybrids_cut_plots/heatmap-1.png" width="1008" /></p>
 </div>
 <div id="boxplots-of-each-volatile" class="section level1">
@@ -1108,6 +1112,27 @@ fvolhybn.top %&gt;% mutate(variable=factor(variable, levels=boxplot.order)) %&gt
   theme(axis.text.x=element_blank(), axis.title.x=element_blank(), 
         panel.grid.major.x=element_blank(), panel.grid.minor.y=element_blank(), legend.position = &quot;top&quot;)</code></pre>
 <p><img src="hybrids_cut_plots/boxplots-1.svg" width="864" /></p>
+<div id="hybrid-additivity-vs.-differences-between-parents"
+class="section level2">
+<h2>Hybrid additivity vs. differences between parents</h2>
+<pre class="r"><code>library(ggrepel)
+vol_floor &lt;- 1e-5 #avoid negative estimates, 10x less than smallest positive estimate
+tests.vols %&gt;%  mutate(lfc_species = log2(pmax(`S. kaalae`,vol_floor)/pmax(`S. hookeri`,vol_floor)), 
+                       lfc_hybrids = log2(hyb.mean/par.mean)) %&gt;% ungroup() %&gt;% 
+  left_join(chemsf %&gt;% mutate(variable=fct_recode(Name, !!!multiline))) %&gt;% 
+  mutate(Class = Class %&gt;% str_remove(&quot;s$&quot;) %&gt;% 
+           recode(&quot;Irregular terpene&quot;=&quot;Other terpenoid&quot;, &quot;Monoterpene&quot;=&quot;Monoterpenoid&quot;) %&gt;% factor()) %&gt;% 
+  ggplot(aes(x=lfc_species, y=lfc_hybrids, color=Class)) + 
+  geom_vline(xintercept=0, color=&quot;grey40&quot;) + geom_hline(yintercept=0, color=&quot;grey40&quot;) + 
+  geom_point(aes(shape = parmean.p.value &lt; 0.05), size=2.5) + scale_shape_manual(values=c(1,19), guide=&quot;none&quot;)+
+  geom_text_repel(aes(label=variable), size=3.5, min.segment.length=5, show.legend = F)  +
+  scale_color_manual(values=c(&quot;#BC0060&quot;,&quot;#027B8C&quot;,&quot;#5d9400&quot;,&quot;#E56E00&quot;)) +
+  scale_x_continuous(expand=expansion(c(0.1, 0.25)))+ 
+  theme_minimal() + theme(panel.grid.minor = element_blank(), legend.position = &quot;top&quot;) +
+  labs(x=&quot;log2 fold change in emissions between parents (S. kaalae / S. hookeri)&quot;,
+       y=&quot;log2 fold change in emissions between hybrids and mean of parents&quot;,color=&quot;&quot;)</code></pre>
+<p><img src="hybrids_cut_plots/hyb_combo-1.svg" width="672" /></p>
+</div>
 </div>
 <div id="total-emissions-and-diversity" class="section level1">
 <h1>Total emissions and diversity</h1>
@@ -1292,6 +1317,20 @@ obj.mean &lt;- obj.mean %&gt;% arrange(NMDS2, NMDS1)
     geom_text(data=obj.mean[obj.mean$score==&quot;species&quot; &amp; obj.mean$occur&gt;nrow(volhybn)*minprop,], aes(label=label), color=&quot;black&quot;,  alpha=1, size=3.8) 
     ) </code></pre>
 <p><img src="hybrids_cut_plots/2dnmdsnightmean-1.svg" width="1008" /></p>
+</div>
+<div id="direction-of-cross-permanova" class="section level2">
+<h2>Direction of cross PERMANOVA</h2>
+<pre class="r"><code>hybridf.plants &lt;- svhybn.plants$SpeciesR %in% c(&quot;K x H&quot;, &quot;H x K&quot;)
+adonis2(decostand(fvolhybn.plants[hybridf.plants,], method=&quot;total&quot;)~ SpeciesR, data = svhybn[hybridf.plants,])</code></pre>
+<pre><code>Permutation test for adonis under reduced model
+Permutation: free
+Number of permutations: 999
+
+adonis2(formula = decostand(fvolhybn.plants[hybridf.plants, ], method = &quot;total&quot;) ~ SpeciesR, data = svhybn[hybridf.plants, ])
+         Df SumOfSqs      R2     F Pr(&gt;F)
+Model     2  0.03414 0.01556 0.237  0.979
+Residual 30  2.16030 0.98444             
+Total    32  2.19444 1.00000             </code></pre>
 </div>
 </div>
 <div id="variation-at-different-levels" class="section level1">
