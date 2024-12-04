@@ -44,9 +44,50 @@ figs <- list.files("./hybrids_cut_plots", pattern=".svg")
 walk(figs, ~system(paste0("inkscape --export-dpi 150 -o ./hybrids_cut_plots/png/", str_replace(.x, ".svg",".png"), " ./hybrids_cut_plots/", .x)))
 ```
 
-# Sample inventory
+```{r sdata}
+greenhouse <- matrix(c(-117.8475746, 33.6472914), nrow=1) #latlong of UCI greenhouse
 
-```{r load_scents}
+s <- read_tsv("data/UCI_GCMS/Schiedea Volatiles Sampling - Samples.tsv") %>% 
+  drop_na(Start, Stop) %>% #2 bad samples with no Start, 1 missing Stop in 2019
+  nest(.by=SampleDate) %>% #sunset function is slow, run on unique dates
+  mutate(sunset = map_vec(SampleDate, 
+                          ~maptools::sunriset(dateTime=ymd_hms(paste(.x, "13:00:00")),
+                                              direction="sunset", crds=greenhouse, POSIXct.out=T)$time),
+         solarnoon = map_vec(SampleDate, 
+                          ~maptools::solarnoon(dateTime=ymd_hms(paste(.x, "13:00:00")),
+                                              crds=greenhouse, POSIXct.out=T)$time)) %>% unnest(data) %>% 
+  mutate(StartSunset = difftime(ymd_hms(paste(SampleDate, Start)), sunset, units="hours"),
+         StopSunset =  difftime(ymd_hms(paste(SampleDate, Stop)), sunset, units="hours"),
+         StartNoon =   difftime(ymd_hms(paste(SampleDate, Start)), solarnoon, units="hours"))
+
+CASsubs <- read_tsv("data/UCI_GCMS/CASsubs3.csv") %>% select(CAS, newCAS) %>% deframe()
+
+data <- read_tsv("data/UCI_GCMS/svhyb_ambient_blanks.csv") %>% 
+  distinct() %>% #generated some reports twice
+  select(FileName:`Base Peak`, Weighted, Reverse) %>% 
+  rename(Path = FileName, Fraction = Amount, Match = Weighted) %>% 
+  mutate(Path = str_sub(Path, 52, -5), #remove base directory and file extension
+         SampleDate = str_extract(Path, "\\\\(.*)", group=1), #file name after folder
+         Sample = if_else(str_sub(SampleDate, 1, 5)=="BLANK", SampleDate, 
+          str_extract(SampleDate, "(.*?)_.*", group=1) %>% #drop GC index
+            #pad sample number to 3 digits with zeros
+            str_replace("(\\d+)", function(x) formatC(as.integer(x), width=3, format="d", flag="0")) %>% 
+            str_replace("^KAHO", "SKAHO")),
+         CAS = str_replace(CAS, "(\\d{2,7})(\\d{2})(\\d{1})$","\\1-\\2-\\3") %>% #add dashes
+           recode(!!!CASsubs),#manual identifications
+         Name = str_remove(Name, "^>"),
+         across(c(SampleDate, Path, Model, Sample, Name, CAS), factor),
+         across(c(Fraction, Purity, `Min. Abund.`), ~ as.numeric(str_remove(.x, "%"))/100)) %>% 
+  #AMDIS Base Peak only has the most common ion integrated
+  #instead, multiply fractions by total peak areas from sum_chromatograms.R
+  left_join(read_tsv("data/UCI_GCMS/svhyb_TICsums.csv") %>% 
+              mutate(SampleDate = str_extract(file, "(.*).CDF", group=1))) %>% 
+  mutate(Area = Fraction * sumTIC)
+```
+
+# Filtering
+
+```{r ng_hr}
 #Load filtered scent data (includes octenol and hexenol) and metadata
 # load("./data/UCI_GCMS/sdata3_hexoct.Rdata")
 # TODO some red flags in the Notes column - possible wrong IDs
@@ -55,13 +96,14 @@ walk(figs, ~system(paste0("inkscape --export-dpi 150 -o ./hybrids_cut_plots/png/
 load("./data/UCI_GCMS/sdata3_hexoct_svvol.Rdata")
 
 #convert to nanograms per hour using standards for each compound class
-#TODO move this to sdata3
 vocs <- colnames(vol)
 chemsf <- tibble(shortname = vocs) %>%# two VOCs got renamed since table was made 
   bind_cols(read_tsv("data/UCI_GCMS/chemspc3_classes.csv")) %>% 
   left_join(read_tsv("data/UCI_GCMS/multipliers.csv"))
 vol <- sweep(vol, 2, chemsf$ngPerArea, FUN= `*`)
 ```
+
+# Sample inventory
 
 ```{r sv}
 eve <- -2.5 #hours before sunset
