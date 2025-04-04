@@ -224,6 +224,9 @@ summary(as.numeric(svhybn$StartSunset))
 # Heatmap
 
 ```{r heatmap, dev="png", dev.args=list(), fig.width=10.5, fig.height=7.6}
+class_subs <- c("Irregular terpene"="Other terpenoid", "Monoterpene"="Monoterpenoid")
+classcolr <- c(Aliphatic="#BC0060",Benzenoid="#027B8C",Monoterpenoid="#5d9400",`Other terpenoid`="#E56E00", Sesquiterpene="#000000")
+
 #1 dimensional NMDS for ordering samples in heatmap
 set.seed(1)
 mdshybn1 <- metaMDS(decostand(fvolhybn.plants, method="hellinger"),k=1,try=200, autotransform=F, trace=0)
@@ -245,8 +248,10 @@ ph <- pheatmap(heat.mat,
          clustering_callback = function(hc, ...){dendsort(hc, type="average")},
          scale="none", color=inferno(512),
          annotation_col = data.frame(Species=as.integer(svhybn.plants$SpeciesR)[srt], row.names=rownames(fvolhybn.plants)[srt]), 
-         annotation_colors = list(Species=hybcolr), annotation_names_col = F,
+         annotation_colors = list(Species=hybcolr, Class=classcolr), annotation_names_col = F,
          gaps_col = which(as.logical(diff(as.integer(svhybn.plants$SpeciesR)[srt]))),
+         annotation_row = data.frame(Class=chemsf$Class %>% str_remove("s$") %>% recode(!!!class_subs) %>% factor(), 
+                                     row.names = chemsf$shortname), annotation_names_row = F,
    cellwidth = 3.5, cellheight = 14, fontsize = 10, border_color = NA, legend=F, legend_breaks=NA, annotation_legend=F, cutree_rows=5
 )
 downViewport("col_annotation.3-3-3-3")
@@ -335,13 +340,12 @@ vol_floor <- 1e-5 #avoid negative estimates, 10x less than smallest positive est
 tests.vols %>%  mutate(lfc_species = log2(pmax(`S. kaalae`,vol_floor)/pmax(`S. hookeri`,vol_floor)), 
                        lfc_hybrids = log2(hyb.mean/par.mean)) %>% ungroup() %>% 
   left_join(chemsf %>% mutate(variable=fct_recode(Name, !!!multiline))) %>% 
-  mutate(Class = Class %>% str_remove("s$") %>% 
-           recode("Irregular terpene"="Other terpenoid", "Monoterpene"="Monoterpenoid") %>% factor()) %>% 
+  mutate(Class = Class %>% str_remove("s$") %>% recode(!!!class_subs) %>% factor()) %>% 
   ggplot(aes(x=lfc_species, y=lfc_hybrids, color=Class)) + 
   geom_vline(xintercept=0, color="grey40") + geom_hline(yintercept=0, color="grey40") + 
   geom_point(aes(shape = parmean.p.value < 0.05), size=2.5) + scale_shape_manual(values=c(1,19), guide="none")+
   geom_text_repel(aes(label=variable), size=3.5, min.segment.length=5, show.legend = F)  +
-  scale_color_manual(values=c("#BC0060","#027B8C","#5d9400","#E56E00")) +
+  scale_color_manual(values=classcolr) +
   scale_x_continuous(expand=expansion(c(0.1, 0.25)))+ 
   theme_minimal() + theme(panel.grid.minor = element_blank(), legend.position = "top") +
   labs(x="log2 fold change in emissions between parents (S. kaalae / S. hookeri)",

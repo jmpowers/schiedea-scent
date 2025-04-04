@@ -11,7 +11,7 @@
 
 <meta name="author" content="John Powers" />
 
-<meta name="date" content="2024-12-04" />
+<meta name="date" content="2025-04-03" />
 
 <title>Floral scent of Schiedea kaalae x hookeri hybrids</title>
 
@@ -254,7 +254,7 @@ div.tocify {
 hookeri</em> hybrids</h1>
 <h4 class="author"><a href="http://sites.uci.edu/powers/">John
 Powers</a></h4>
-<h4 class="date">2024-12-04</h4>
+<h4 class="date">2025-04-03</h4>
 
 </div>
 
@@ -759,7 +759,10 @@ kable(plants.parent, caption=&quot;parent plants&quot;)</code></pre>
 </div>
 <div id="heatmap" class="section level1">
 <h1>Heatmap</h1>
-<pre class="r"><code>#1 dimensional NMDS for ordering samples in heatmap
+<pre class="r"><code>class_subs &lt;- c(&quot;Irregular terpene&quot;=&quot;Other terpenoid&quot;, &quot;Monoterpene&quot;=&quot;Monoterpenoid&quot;)
+classcolr &lt;- c(Aliphatic=&quot;#BC0060&quot;,Benzenoid=&quot;#027B8C&quot;,Monoterpenoid=&quot;#5d9400&quot;,`Other terpenoid`=&quot;#E56E00&quot;, Sesquiterpene=&quot;#000000&quot;)
+
+#1 dimensional NMDS for ordering samples in heatmap
 set.seed(1)
 mdshybn1 &lt;- metaMDS(decostand(fvolhybn.plants, method=&quot;hellinger&quot;),k=1,try=200, autotransform=F, trace=0)
 srt &lt;- order(svhybn.plants$SpeciesR, -mdshybn1$points, decreasing=T)
@@ -780,8 +783,10 @@ ph &lt;- pheatmap(heat.mat,
          clustering_callback = function(hc, ...){dendsort(hc, type=&quot;average&quot;)},
          scale=&quot;none&quot;, color=inferno(512),
          annotation_col = data.frame(Species=as.integer(svhybn.plants$SpeciesR)[srt], row.names=rownames(fvolhybn.plants)[srt]), 
-         annotation_colors = list(Species=hybcolr), annotation_names_col = F,
+         annotation_colors = list(Species=hybcolr, Class=classcolr), annotation_names_col = F,
          gaps_col = which(as.logical(diff(as.integer(svhybn.plants$SpeciesR)[srt]))),
+         annotation_row = data.frame(Class=chemsf$Class %&gt;% str_remove(&quot;s$&quot;) %&gt;% recode(!!!class_subs) %&gt;% factor(), 
+                                     row.names = chemsf$shortname), annotation_names_row = F,
    cellwidth = 3.5, cellheight = 14, fontsize = 10, border_color = NA, legend=F, legend_breaks=NA, annotation_legend=F, cutree_rows=5
 )
 downViewport(&quot;col_annotation.3-3-3-3&quot;)
@@ -1162,13 +1167,12 @@ vol_floor &lt;- 1e-5 #avoid negative estimates, 10x less than smallest positive 
 tests.vols %&gt;%  mutate(lfc_species = log2(pmax(`S. kaalae`,vol_floor)/pmax(`S. hookeri`,vol_floor)), 
                        lfc_hybrids = log2(hyb.mean/par.mean)) %&gt;% ungroup() %&gt;% 
   left_join(chemsf %&gt;% mutate(variable=fct_recode(Name, !!!multiline))) %&gt;% 
-  mutate(Class = Class %&gt;% str_remove(&quot;s$&quot;) %&gt;% 
-           recode(&quot;Irregular terpene&quot;=&quot;Other terpenoid&quot;, &quot;Monoterpene&quot;=&quot;Monoterpenoid&quot;) %&gt;% factor()) %&gt;% 
+  mutate(Class = Class %&gt;% str_remove(&quot;s$&quot;) %&gt;% recode(!!!class_subs) %&gt;% factor()) %&gt;% 
   ggplot(aes(x=lfc_species, y=lfc_hybrids, color=Class)) + 
   geom_vline(xintercept=0, color=&quot;grey40&quot;) + geom_hline(yintercept=0, color=&quot;grey40&quot;) + 
   geom_point(aes(shape = parmean.p.value &lt; 0.05), size=2.5) + scale_shape_manual(values=c(1,19), guide=&quot;none&quot;)+
   geom_text_repel(aes(label=variable), size=3.5, min.segment.length=5, show.legend = F)  +
-  scale_color_manual(values=c(&quot;#BC0060&quot;,&quot;#027B8C&quot;,&quot;#5d9400&quot;,&quot;#E56E00&quot;)) +
+  scale_color_manual(values=classcolr) +
   scale_x_continuous(expand=expansion(c(0.1, 0.25)))+ 
   theme_minimal() + theme(panel.grid.minor = element_blank(), legend.position = &quot;top&quot;) +
   labs(x=&quot;log2 fold change in emissions between parents (S. kaalae / S. hookeri)&quot;,
