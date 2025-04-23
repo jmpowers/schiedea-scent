@@ -42,6 +42,7 @@ knitr::opts_chunk$set(comment="", cache=T, warning = F, message = F,
 ```{r figures, eval=FALSE}
 figs <- list.files("./hybrids_cut_plots", pattern=".svg")
 walk(figs, ~system(paste0("inkscape --export-dpi 150 -o ./hybrids_cut_plots/png/", str_replace(.x, ".svg",".png"), " ./hybrids_cut_plots/", .x)))
+walk(figs, ~system(paste0("inkscape -o ./hybrids_cut_plots/eps/", str_replace(.x, ".svg",".eps"), " ./hybrids_cut_plots/", .x)))
 ```
 
 ```{r sdata}
@@ -397,7 +398,7 @@ obj$occur <- NA; obj$occur[obj$score=="species"] <- colSums(pavolhybn)
 obj$ftotal <- NA; obj$ftotal[obj$score=="species"] <- colSums(fvolhybn)
 obj <- obj %>% arrange(NMDS2, NMDS1)
 
-hybnplot <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) + 
+hybnplot <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) + xlab("NMDS1") +
     geom_path(data=filter(obj, score=="sites"),aes(group=plants, color="cross"), linewidth=1) +
     geom_path(data=filter(obj, score=="sites"),aes(group=parents, color="parents"), linewidth=1) +
     geom_path(data=filter(obj, score=="sites"),aes(group=plantsi, color="plantsi"), linewidth=1) +
@@ -407,7 +408,7 @@ hybnplot <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) +
                      labels=   c("Bag",             "Infloresence","Plant",   "Clone",   "Cross"),
                      values=c(cross="grey80", parents="grey50", plantsi="grey20",
                               plantsinflo="goldenrod",plantsinflodate="#E41A1C",sites="white",species=NA)) +
-      coord_fixed(xlim=range(obj$NMDS1[obj$score=="sites"])+c(-0.35,0.45), 
+      coord_fixed(xlim=range(obj$NMDS1[obj$score=="sites"])+c(-0.42,0.45), 
                   ylim=range(obj$NMDS2[obj$score=="sites"])) + theme_pubr()+
     scale_x_continuous(expand=c(0,0)) +
     theme(legend.text = element_text(size=13)) + 
@@ -416,7 +417,7 @@ hybnplot <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) +
 (hybplotn.spec <- hybnplot + 
         scale_fill_manual("", values=hybcolr, labels=hyblabs,  na.translate=F) +
   geom_point(data=obj[obj$score=="sites",], aes(fill=SpeciesR), shape=21, size=3, color="white") +
-    geom_text(data=obj[obj$score=="species" & obj$occur>nrow(volhybn)*minprop,], aes(label=label), color="black", size=3.8) ) 
+    geom_text(data=obj[obj$score=="species" & obj$occur>nrow(volhybn)*minprop,], aes(label=label), color="black", size=3.8, fontface=2) ) 
 ```
 
 ## Mean of each plant
@@ -446,8 +447,8 @@ obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
       scale_color_manual("",breaks=c("cross","parents"), labels=c("Cross","Clone"), values=c(cross="grey80")) +
     geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=plants, color="cross"), size=1) +
     #geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=parents, color="parents"), size=1) +
-    geom_point(data=obj.mean[obj.mean$score=="sites",], aes(fill=SpeciesR), shape=21, size=2.5, color="white") +
-    geom_text(data=obj.mean[obj.mean$score=="species" & obj.mean$occur>nrow(volhybn)*minprop,], aes(label=label), color="black",  alpha=1, size=3.8) 
+    geom_point(data=obj.mean[obj.mean$score=="sites",], aes(fill=SpeciesR), shape=21, size=3, color="white") +
+    geom_text(data=obj.mean[obj.mean$score=="species" & obj.mean$occur>nrow(volhybn)*minprop,], aes(label=label), color="black",  alpha=1, size=3.8, fontface=2) 
     ) 
 ```
 

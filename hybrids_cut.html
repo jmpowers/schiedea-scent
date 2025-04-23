@@ -11,7 +11,7 @@
 
 <meta name="author" content="John Powers" />
 
-<meta name="date" content="2025-04-03" />
+<meta name="date" content="2025-04-23" />
 
 <title>Floral scent of Schiedea kaalae x hookeri hybrids</title>
 
@@ -254,7 +254,7 @@ div.tocify {
 hookeri</em> hybrids</h1>
 <h4 class="author"><a href="http://sites.uci.edu/powers/">John
 Powers</a></h4>
-<h4 class="date">2025-04-03</h4>
+<h4 class="date">2025-04-23</h4>
 
 </div>
 
@@ -265,7 +265,8 @@ img{ max-width:200%; height: auto; }
 td, th { padding : 6px }
 </style>
 <pre class="r"><code>figs &lt;- list.files(&quot;./hybrids_cut_plots&quot;, pattern=&quot;.svg&quot;)
-walk(figs, ~system(paste0(&quot;inkscape --export-dpi 150 -o ./hybrids_cut_plots/png/&quot;, str_replace(.x, &quot;.svg&quot;,&quot;.png&quot;), &quot; ./hybrids_cut_plots/&quot;, .x)))</code></pre>
+walk(figs, ~system(paste0(&quot;inkscape --export-dpi 150 -o ./hybrids_cut_plots/png/&quot;, str_replace(.x, &quot;.svg&quot;,&quot;.png&quot;), &quot; ./hybrids_cut_plots/&quot;, .x)))
+walk(figs, ~system(paste0(&quot;inkscape -o ./hybrids_cut_plots/eps/&quot;, str_replace(.x, &quot;.svg&quot;,&quot;.eps&quot;), &quot; ./hybrids_cut_plots/&quot;, .x)))</code></pre>
 <pre class="r"><code>greenhouse &lt;- matrix(c(-117.8475746, 33.6472914), nrow=1) #latlong of UCI greenhouse
 
 s &lt;- read_tsv(&quot;data/UCI_GCMS/Schiedea Volatiles Sampling - Samples.tsv&quot;) %&gt;% 
@@ -1299,7 +1300,7 @@ obj$occur &lt;- NA; obj$occur[obj$score==&quot;species&quot;] &lt;- colSums(pavo
 obj$ftotal &lt;- NA; obj$ftotal[obj$score==&quot;species&quot;] &lt;- colSums(fvolhybn)
 obj &lt;- obj %&gt;% arrange(NMDS2, NMDS1)
 
-hybnplot &lt;- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) + 
+hybnplot &lt;- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) + xlab(&quot;NMDS1&quot;) +
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=plants, color=&quot;cross&quot;), linewidth=1) +
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=parents, color=&quot;parents&quot;), linewidth=1) +
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=plantsi, color=&quot;plantsi&quot;), linewidth=1) +
@@ -1309,7 +1310,7 @@ hybnplot &lt;- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) +
                      labels=   c(&quot;Bag&quot;,             &quot;Infloresence&quot;,&quot;Plant&quot;,   &quot;Clone&quot;,   &quot;Cross&quot;),
                      values=c(cross=&quot;grey80&quot;, parents=&quot;grey50&quot;, plantsi=&quot;grey20&quot;,
                               plantsinflo=&quot;goldenrod&quot;,plantsinflodate=&quot;#E41A1C&quot;,sites=&quot;white&quot;,species=NA)) +
-      coord_fixed(xlim=range(obj$NMDS1[obj$score==&quot;sites&quot;])+c(-0.35,0.45), 
+      coord_fixed(xlim=range(obj$NMDS1[obj$score==&quot;sites&quot;])+c(-0.42,0.45), 
                   ylim=range(obj$NMDS2[obj$score==&quot;sites&quot;])) + theme_pubr()+
     scale_x_continuous(expand=c(0,0)) +
     theme(legend.text = element_text(size=13)) + 
@@ -1318,7 +1319,7 @@ hybnplot &lt;- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) +
 (hybplotn.spec &lt;- hybnplot + 
         scale_fill_manual(&quot;&quot;, values=hybcolr, labels=hyblabs,  na.translate=F) +
   geom_point(data=obj[obj$score==&quot;sites&quot;,], aes(fill=SpeciesR), shape=21, size=3, color=&quot;white&quot;) +
-    geom_text(data=obj[obj$score==&quot;species&quot; &amp; obj$occur&gt;nrow(volhybn)*minprop,], aes(label=label), color=&quot;black&quot;, size=3.8) ) </code></pre>
+    geom_text(data=obj[obj$score==&quot;species&quot; &amp; obj$occur&gt;nrow(volhybn)*minprop,], aes(label=label), color=&quot;black&quot;, size=3.8, fontface=2) ) </code></pre>
 <p><img src="hybrids_cut_plots/2dnmdsnight-1.svg" width="1008" /></p>
 </div>
 <div id="mean-of-each-plant" class="section level2">
@@ -1362,8 +1363,8 @@ obj.mean &lt;- obj.mean %&gt;% arrange(NMDS2, NMDS1)
       scale_color_manual(&quot;&quot;,breaks=c(&quot;cross&quot;,&quot;parents&quot;), labels=c(&quot;Cross&quot;,&quot;Clone&quot;), values=c(cross=&quot;grey80&quot;)) +
     geom_path(data=obj.mean[obj.mean$score==&quot;sites&quot;,],aes(group=plants, color=&quot;cross&quot;), size=1) +
     #geom_path(data=obj.mean[obj.mean$score==&quot;sites&quot;,],aes(group=parents, color=&quot;parents&quot;), size=1) +
-    geom_point(data=obj.mean[obj.mean$score==&quot;sites&quot;,], aes(fill=SpeciesR), shape=21, size=2.5, color=&quot;white&quot;) +
-    geom_text(data=obj.mean[obj.mean$score==&quot;species&quot; &amp; obj.mean$occur&gt;nrow(volhybn)*minprop,], aes(label=label), color=&quot;black&quot;,  alpha=1, size=3.8) 
+    geom_point(data=obj.mean[obj.mean$score==&quot;sites&quot;,], aes(fill=SpeciesR), shape=21, size=3, color=&quot;white&quot;) +
+    geom_text(data=obj.mean[obj.mean$score==&quot;species&quot; &amp; obj.mean$occur&gt;nrow(volhybn)*minprop,], aes(label=label), color=&quot;black&quot;,  alpha=1, size=3.8, fontface=2) 
     ) </code></pre>
 <p><img src="hybrids_cut_plots/2dnmdsnightmean-1.svg" width="1008" /></p>
 </div>
