@@ -11,7 +11,7 @@
 
 <meta name="author" content="John Powers" />
 
-<meta name="date" content="2024-11-21" />
+<meta name="date" content="2024-12-04" />
 
 <title>Floral scent of Schiedea kaalae x hookeri hybrids</title>
 
@@ -254,7 +254,7 @@ div.tocify {
 hookeri</em> hybrids</h1>
 <h4 class="author"><a href="http://sites.uci.edu/powers/">John
 Powers</a></h4>
-<h4 class="date">2024-11-21</h4>
+<h4 class="date">2024-12-04</h4>
 
 </div>
 
@@ -266,8 +266,48 @@ td, th { padding : 6px }
 </style>
 <pre class="r"><code>figs &lt;- list.files(&quot;./hybrids_cut_plots&quot;, pattern=&quot;.svg&quot;)
 walk(figs, ~system(paste0(&quot;inkscape --export-dpi 150 -o ./hybrids_cut_plots/png/&quot;, str_replace(.x, &quot;.svg&quot;,&quot;.png&quot;), &quot; ./hybrids_cut_plots/&quot;, .x)))</code></pre>
-<div id="sample-inventory" class="section level1">
-<h1>Sample inventory</h1>
+<pre class="r"><code>greenhouse &lt;- matrix(c(-117.8475746, 33.6472914), nrow=1) #latlong of UCI greenhouse
+
+s &lt;- read_tsv(&quot;data/UCI_GCMS/Schiedea Volatiles Sampling - Samples.tsv&quot;) %&gt;% 
+  drop_na(Start, Stop) %&gt;% #2 bad samples with no Start, 1 missing Stop in 2019
+  nest(.by=SampleDate) %&gt;% #sunset function is slow, run on unique dates
+  mutate(sunset = map_vec(SampleDate, 
+                          ~maptools::sunriset(dateTime=ymd_hms(paste(.x, &quot;13:00:00&quot;)),
+                                              direction=&quot;sunset&quot;, crds=greenhouse, POSIXct.out=T)$time),
+         solarnoon = map_vec(SampleDate, 
+                          ~maptools::solarnoon(dateTime=ymd_hms(paste(.x, &quot;13:00:00&quot;)),
+                                              crds=greenhouse, POSIXct.out=T)$time)) %&gt;% unnest(data) %&gt;% 
+  mutate(StartSunset = difftime(ymd_hms(paste(SampleDate, Start)), sunset, units=&quot;hours&quot;),
+         StopSunset =  difftime(ymd_hms(paste(SampleDate, Stop)), sunset, units=&quot;hours&quot;),
+         StartNoon =   difftime(ymd_hms(paste(SampleDate, Start)), solarnoon, units=&quot;hours&quot;))
+
+CASsubs &lt;- read_tsv(&quot;data/UCI_GCMS/CASsubs3.csv&quot;) %&gt;% select(CAS, newCAS) %&gt;% deframe()
+
+data &lt;- read_tsv(&quot;data/UCI_GCMS/svhyb_ambient_blanks.csv&quot;) %&gt;% 
+  distinct() %&gt;% #generated some reports twice
+  select(FileName:`Base Peak`, Weighted, Reverse) %&gt;% 
+  rename(Path = FileName, Fraction = Amount, Match = Weighted) %&gt;% 
+  mutate(Path = str_sub(Path, 52, -5), #remove base directory and file extension
+         SampleDate = str_extract(Path, &quot;\\\\(.*)&quot;, group=1), #file name after folder
+         Sample = if_else(str_sub(SampleDate, 1, 5)==&quot;BLANK&quot;, SampleDate, 
+          str_extract(SampleDate, &quot;(.*?)_.*&quot;, group=1) %&gt;% #drop GC index
+            #pad sample number to 3 digits with zeros
+            str_replace(&quot;(\\d+)&quot;, function(x) formatC(as.integer(x), width=3, format=&quot;d&quot;, flag=&quot;0&quot;)) %&gt;% 
+            str_replace(&quot;^KAHO&quot;, &quot;SKAHO&quot;)),
+         CAS = str_replace(CAS, &quot;(\\d{2,7})(\\d{2})(\\d{1})$&quot;,&quot;\\1-\\2-\\3&quot;) %&gt;% #add dashes
+           recode(!!!CASsubs),#manual identifications
+         Name = str_remove(Name, &quot;^&gt;&quot;),
+         across(c(SampleDate, Path, Model, Sample, Name, CAS), factor),
+         across(c(Fraction, Purity, `Min. Abund.`), ~ as.numeric(str_remove(.x, &quot;%&quot;))/100)) %&gt;% 
+  #AMDIS Base Peak only has the most common ion integrated
+  #instead, multiply fractions by total peak areas from sum_chromatograms.R
+  left_join(read_tsv(&quot;data/UCI_GCMS/svhyb_TICsums.csv&quot;) %&gt;% 
+              mutate(SampleDate = str_extract(file, &quot;(.*).CDF&quot;, group=1))) %&gt;% 
+  mutate(Area = Fraction * sumTIC)
+
+chems.pc &lt;- read_tsv(&quot;data/UCI_GCMS/chemspc3.csv&quot;) %&gt;% select(CAS, IUPAC.Name) %&gt;% mutate(IUPAC.Name = str_replace(IUPAC.Name, &quot;~\\{(.*?)\\}&quot;, &quot;\\1&quot;))</code></pre>
+<div id="filtering" class="section level1">
+<h1>Filtering</h1>
 <pre class="r"><code>#Load filtered scent data (includes octenol and hexenol) and metadata
 # load(&quot;./data/UCI_GCMS/sdata3_hexoct.Rdata&quot;)
 # TODO some red flags in the Notes column - possible wrong IDs
@@ -276,12 +316,14 @@ walk(figs, ~system(paste0(&quot;inkscape --export-dpi 150 -o ./hybrids_cut_plots
 load(&quot;./data/UCI_GCMS/sdata3_hexoct_svvol.Rdata&quot;)
 
 #convert to nanograms per hour using standards for each compound class
-#TODO move this to sdata3
 vocs &lt;- colnames(vol)
 chemsf &lt;- tibble(shortname = vocs) %&gt;%# two VOCs got renamed since table was made 
   bind_cols(read_tsv(&quot;data/UCI_GCMS/chemspc3_classes.csv&quot;)) %&gt;% 
   left_join(read_tsv(&quot;data/UCI_GCMS/multipliers.csv&quot;))
 vol &lt;- sweep(vol, 2, chemsf$ngPerArea, FUN= `*`)</code></pre>
+</div>
+<div id="sample-inventory" class="section level1">
+<h1>Sample inventory</h1>
 <pre class="r"><code>eve &lt;- -2.5 #hours before sunset
 hybcolr &lt;- c(`S. kaalae` = &quot;#31A354&quot;, `K x H` = &quot;#FD8D3C&quot;, `H x K` = &quot;#A65628&quot;, `S. hookeri` = &quot;#756BB1&quot;)
 hyblabs &lt;- c(expression(italic(&quot;S. kaalae&quot;)),&quot;K x H&quot;, &quot;H x K&quot;, expression(italic(&quot;S. hookeri&quot;)))
@@ -1259,12 +1301,15 @@ hybnplot &lt;- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) +
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=plantsi, color=&quot;plantsi&quot;), linewidth=1) +
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=plantsinflo, color=&quot;plantsinflo&quot;), linewidth=1) +
     geom_path(data=filter(obj, score==&quot;sites&quot;),aes(group=plantsinflodate, color=&quot;plantsinflodate&quot;), linewidth=1) +
-  scale_color_manual(&quot;&quot;,breaks=c(&quot;cross&quot;,&quot;parents&quot;,&quot;plantsi&quot;,&quot;plantsinflo&quot;,&quot;plantsinflodate&quot;), labels=c(&quot;Cross&quot;,&quot;Clone&quot;,&quot;Plant&quot;,&quot;Inflorescence&quot;,&quot;Bag&quot;), values=c(cross=&quot;grey90&quot;, parents=&quot;grey60&quot;, plantsi=&quot;grey30&quot;, plantsinflo=brewer.pal(6,&quot;Set1&quot;)[6],plantsinflodate=brewer.pal(6,&quot;Set1&quot;)[1],sites=&quot;white&quot;,species=NA)) +
+  scale_color_manual(&quot;&quot;,breaks=c(&quot;plantsinflodate&quot;, &quot;plantsinflo&quot;, &quot;plantsi&quot;, &quot;parents&quot;, &quot;cross&quot;),
+                     labels=   c(&quot;Bag&quot;,             &quot;Infloresence&quot;,&quot;Plant&quot;,   &quot;Clone&quot;,   &quot;Cross&quot;),
+                     values=c(cross=&quot;grey80&quot;, parents=&quot;grey50&quot;, plantsi=&quot;grey20&quot;,
+                              plantsinflo=&quot;goldenrod&quot;,plantsinflodate=&quot;#E41A1C&quot;,sites=&quot;white&quot;,species=NA)) +
       coord_fixed(xlim=range(obj$NMDS1[obj$score==&quot;sites&quot;])+c(-0.35,0.45), 
                   ylim=range(obj$NMDS2[obj$score==&quot;sites&quot;])) + theme_pubr()+
     scale_x_continuous(expand=c(0,0)) +
     theme(legend.text = element_text(size=13)) + 
-    guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=3)))
+    guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=4)))
 
 (hybplotn.spec &lt;- hybnplot + 
         scale_fill_manual(&quot;&quot;, values=hybcolr, labels=hyblabs,  na.translate=F) +
@@ -1308,9 +1353,9 @@ obj.mean &lt;- obj.mean %&gt;% arrange(NMDS2, NMDS1)
     theme_pubr()+
     scale_x_continuous(expand=c(0,0))+
     theme(legend.text = element_text(size=13)) + 
-    guides(fill = guide_legend(override.aes = list(size=5)), color=guide_legend(override.aes=list(size=3)))+
+    guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=4)))+
     scale_fill_manual(&quot;&quot;, values=hybcolr, labels=hyblabs,  na.translate=F) +
-      scale_color_manual(&quot;&quot;,breaks=c(&quot;cross&quot;,&quot;parents&quot;), labels=c(&quot;Cross&quot;,&quot;Clone&quot;), values=c(cross=&quot;grey90&quot;, parents=&quot;grey60&quot;)) +
+      scale_color_manual(&quot;&quot;,breaks=c(&quot;cross&quot;,&quot;parents&quot;), labels=c(&quot;Cross&quot;,&quot;Clone&quot;), values=c(cross=&quot;grey80&quot;)) +
     geom_path(data=obj.mean[obj.mean$score==&quot;sites&quot;,],aes(group=plants, color=&quot;cross&quot;), size=1) +
     #geom_path(data=obj.mean[obj.mean$score==&quot;sites&quot;,],aes(group=parents, color=&quot;parents&quot;), size=1) +
     geom_point(data=obj.mean[obj.mean$score==&quot;sites&quot;,], aes(fill=SpeciesR), shape=21, size=2.5, color=&quot;white&quot;) +

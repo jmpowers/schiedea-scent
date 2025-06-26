@@ -83,6 +83,8 @@ data <- read_tsv("data/UCI_GCMS/svhyb_ambient_blanks.csv") %>%
   left_join(read_tsv("data/UCI_GCMS/svhyb_TICsums.csv") %>% 
               mutate(SampleDate = str_extract(file, "(.*).CDF", group=1))) %>% 
   mutate(Area = Fraction * sumTIC)
+
+chems.pc <- read_tsv("data/UCI_GCMS/chemspc3.csv") %>% select(CAS, IUPAC.Name) %>% mutate(IUPAC.Name = str_replace(IUPAC.Name, "~\\{(.*?)\\}", "\\1"))
 ```
 
 # Filtering
@@ -397,12 +399,15 @@ hybnplot <- ggplot(obj, aes(x=-NMDS1, y=NMDS2)) +
     geom_path(data=filter(obj, score=="sites"),aes(group=plantsi, color="plantsi"), linewidth=1) +
     geom_path(data=filter(obj, score=="sites"),aes(group=plantsinflo, color="plantsinflo"), linewidth=1) +
     geom_path(data=filter(obj, score=="sites"),aes(group=plantsinflodate, color="plantsinflodate"), linewidth=1) +
-  scale_color_manual("",breaks=c("cross","parents","plantsi","plantsinflo","plantsinflodate"), labels=c("Cross","Clone","Plant","Inflorescence","Bag"), values=c(cross="grey90", parents="grey60", plantsi="grey30", plantsinflo=brewer.pal(6,"Set1")[6],plantsinflodate=brewer.pal(6,"Set1")[1],sites="white",species=NA)) +
+  scale_color_manual("",breaks=c("plantsinflodate", "plantsinflo", "plantsi", "parents", "cross"),
+                     labels=   c("Bag",             "Infloresence","Plant",   "Clone",   "Cross"),
+                     values=c(cross="grey80", parents="grey50", plantsi="grey20",
+                              plantsinflo="goldenrod",plantsinflodate="#E41A1C",sites="white",species=NA)) +
       coord_fixed(xlim=range(obj$NMDS1[obj$score=="sites"])+c(-0.35,0.45), 
                   ylim=range(obj$NMDS2[obj$score=="sites"])) + theme_pubr()+
     scale_x_continuous(expand=c(0,0)) +
     theme(legend.text = element_text(size=13)) + 
-    guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=3)))
+    guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=4)))
 
 (hybplotn.spec <- hybnplot + 
         scale_fill_manual("", values=hybcolr, labels=hyblabs,  na.translate=F) +
@@ -432,9 +437,9 @@ obj.mean <- obj.mean %>% arrange(NMDS2, NMDS1)
     theme_pubr()+
     scale_x_continuous(expand=c(0,0))+
     theme(legend.text = element_text(size=13)) + 
-    guides(fill = guide_legend(override.aes = list(size=5)), color=guide_legend(override.aes=list(size=3)))+
+    guides(fill = guide_legend(override.aes = list(size=6)), color=guide_legend(override.aes=list(size=4)))+
     scale_fill_manual("", values=hybcolr, labels=hyblabs,  na.translate=F) +
-      scale_color_manual("",breaks=c("cross","parents"), labels=c("Cross","Clone"), values=c(cross="grey90", parents="grey60")) +
+      scale_color_manual("",breaks=c("cross","parents"), labels=c("Cross","Clone"), values=c(cross="grey80")) +
     geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=plants, color="cross"), size=1) +
     #geom_path(data=obj.mean[obj.mean$score=="sites",],aes(group=parents, color="parents"), size=1) +
     geom_point(data=obj.mean[obj.mean$score=="sites",], aes(fill=SpeciesR), shape=21, size=2.5, color="white") +
